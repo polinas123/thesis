@@ -16,10 +16,11 @@ require(urca)
 require(DT)
 require(tseries)
 require(stargazer)
+require(forecast)
 
 # source("multiplot.R")
-source("prepare_data_wDT.R")
-source("var_functions.R")
+source("thesis/prepare_data_wDT.R")
+source("thesis/var_functions.R")
 
 ###############################################################################
 #                               READ RAW DATA                                 #        
@@ -1220,3 +1221,26 @@ assign(as.character(s), PLOTS.states)
 }
 
 PLOTS.states_comp[[1]] = plotly::subplot(CA, nrows = 10, shareX = T)
+
+
+
+
+###############################################################################
+#                          READ TEXT PER CATEGORY                             #        
+###############################################################################
+
+
+
+# show first and last (chronologicaly) sentences from articles each category, along with category_broba
+# or set key to include category_proba to examine strength at top/bottom
+texts = lapply(seq_along(CATEGORIES[interesting]), FUN = function(i){
+        # datatable(rbind(
+        #         head(
+        #                 DT[.(CATEGORIES[i]), .(title, sent_text, category_proba), by = article_id], 
+        #                 options = list(autoWidth = T)),
+        #         tail(
+        #                 DT[.(CATEGORIES[i]), .(title, sent_text, category_proba), by = article_id], 
+        #                 options = list(autoWidth = T))))
+        datatable(DT[.(CATEGORIES[interesting[i]]), .(publish_date, site, title, sent_text, category_proba), by = article_id], 
+                  options = list(autoWidth = T))
+})

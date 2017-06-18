@@ -1,0 +1,5 @@
+WEBSITES_PATH = "/Volumes/Untitled/R/Thesis/websites.csv"
+STATES_PATH = "/Volumes/Untitled/R/Thesis/states.csv"
+COLORS_PATH = "/Volumes/Untitled/R/Thesis/blue-red.csv"
+DATA_PATH = "/Volumes/Untitled/R/Thesis/DATA"
+NAMES_PATH = "/Volumes/Untitled/R/Thesis/new_names.csv"

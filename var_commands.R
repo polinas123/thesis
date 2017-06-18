@@ -45,11 +45,11 @@ histplot(correlate.purple)
 # purple_topics = interesting[c(1,3,5,7:11,13:14)]
 
 # plot all time series in group, to get the general shape:
-tsplot(correlate.nationwide, G_nationwide_topics)
-tsplot(correlate.local, G_local_topics)
-tsplot(correlate.blue, blue_topics)
-tsplot(correlate.red, red_topics)
-tsplot(correlate.purple, purple_topics)
+tsplot(correlate.nationwide, interesting)
+tsplot(correlate.local, interesting)
+tsplot(correlate.blue, interesting)
+tsplot(correlate.red, interesting)
+tsplot(correlate.purple, interesting)
 
 # # inspect univariate autocorrelation of each topic:
 # par(mfcol = c(2,1))
@@ -201,10 +201,10 @@ irf.purple = impulse_response(var.purple)
 # plot impulse response for each topic:
 
 par(ask=F)
-lapply(1:length(irf.blue), function(i){plot(irf.blue[[i]])})
+lapply(1:length(irf.nationwide), function(i){plot(irf.nationwide[[i]])})
 
 # plot self by self plot:
-plot(irf(var.purple, n.ahead = 7, impulse = colnames(var.purple$y)[1], response = colnames(var.purple$y)[1]))
+plot(irf(var.local, n.ahead = 7, impulse = colnames(var.local$y)[1], response = colnames(var.local$y)[1]))
 
 
 # plot comparative plots:

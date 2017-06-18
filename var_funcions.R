@@ -1,4 +1,4 @@
-data2corr = function(grp) {
+data2corr = function(grp, diff = F) {
         
         correlate.any = data.table(publish_date = as.Date(DATES))
         
@@ -14,19 +14,36 @@ data2corr = function(grp) {
                 score = "PurpleScore"
         }
         
-        lapply(seq_along(CATEGORIES[interesting]), FUN = function (
-                i,
-                s = score,
-                data = long[[interesting[i]]]
-        )
-        {
-                setkey(data, "publish_date")        
+        if (!diff){
+                lapply(seq_along(CATEGORIES[interesting]), FUN = function (
+                        i,
+                        s = score,
+                        data = long[[interesting[i]]]
+                )
+                {
+                        setkey(data, "publish_date")        
+                        
+                        origin <- data[names==s, .(publish_date, V1)]
+                        origin <- setDates(origin, DATES)
+                        
+                        correlate.any[, (as.character(NEW_NAMES[interesting[i]])) := origin$V1]
+                })
+        } else {
+                lapply(seq_along(CATEGORIES[interesting]), FUN = function (
+                        i,
+                        s = score,
+                        data = long[[interesting[i]]]
+                )
+                {
+                        setkey(data, "publish_date")        
+                        
+                        origin <- data[names==s, .(publish_date, V1)]
+                        origin <- setDates(origin, DATES)
+                        
+                        correlate.any[, (as.character(NEW_NAMES[interesting[i]])) := diff(origin$V1)]
+                })
                 
-                origin <- data[names==s, .(publish_date, V1)]
-                origin <- setDates(origin, DATES)
-                
-                correlate.any[, (as.character(NEW_NAMES[interesting[i]])) := origin$V1]
-        })
+        }
         
         return (correlate.any)
 }
@@ -71,7 +88,7 @@ histplot = function(correlate.any){
 
 tsplot = function(correlate.any, topics){
         par(mfrow = c(5,2))
-        lapply(seq_along(CATEGORIES[G_local_topics]), FUN = function (i) {
+        lapply(seq_along(CATEGORIES[topics]), FUN = function (i) {
                 plot(
                         x = DATES, 
                         y = na.fill(correlate.any[, NEW_NAMES[topics[i]], with = F],0),
@@ -82,13 +99,13 @@ tsplot = function(correlate.any, topics){
         })
 }
 adf = function(correlate.any, topics) {
-        # test for stationarity of time series:
+        # test for stationarity of time series vectors:
 
         adf.none = lapply(seq_along(CATEGORIES[topics]), FUN = function (i) {
                 ur.df(
                         y = na.fill(correlate.any[, NEW_NAMES[topics[i]], with = F],0),
                         type = "none",
-                        #lags = 20, 
+                        lags = 7, 
                         selectlags = "AIC")
         })                
         
@@ -96,7 +113,7 @@ adf = function(correlate.any, topics) {
                 ur.df(
                         y = na.fill(correlate.any[, NEW_NAMES[topics[i]], with = F],0),
                         type = "drift",
-                        #lags = 20, 
+                        lags = 7, 
                         selectlags = "AIC")
         })                
         
@@ -104,7 +121,7 @@ adf = function(correlate.any, topics) {
                 ur.df(
                         y = na.fill(correlate.any[, NEW_NAMES[topics[i]], with = F],0),
                         type = "trend", 
-                        #lags = 20, 
+                        lags = 7, 
                         selectlags = "AIC")
         })
         return(list(adf.none, adf.drift, adf.trend))
@@ -117,22 +134,22 @@ lags = function(correlate.any, topics, type = "const"){
                 result = VARselect(
                         y = na.fill(correlate.any[, NEW_NAMES[topics], with = F],0),
                         type = "none",
-                        lag.max = 10)
+                        lag.max = 7)
         } else if (type == "const"){
                 result = VARselect(
                         y = na.fill(correlate.any[, NEW_NAMES[topics], with = F],0),
                         type = "const",
-                        lag.max = 10)        
+                        lag.max = 7)        
         } else if (type == "trend") {
                 result = VARselect(
                         y = na.fill(correlate.any[, NEW_NAMES[topics], with = F],0),
                         type = "trend",
-                        lag.max = 10)        
+                        lag.max = 7)        
         } else if (type == "both"){
                 result = VARselect(
                         y = na.fill(correlate.any[, NEW_NAMES[topics], with = F],0),
                         type = "both",
-                        lag.max = 10)        
+                        lag.max = 7)        
         }
 return(as.numeric(result$selection[1][[1]]))
 }

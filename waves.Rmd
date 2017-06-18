@@ -1,0 +1,144 @@
+---
+title: "Waves"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# check dependencies
+packages = c("readxl",
+             "data.table",
+             "forecast",
+             "ggplot2",
+             "xts")
+lapply(packages, require, character.only = T)
+
+# load sources
+source("paths.R")
+source("getData.R")
+source("tidyData.R")
+```
+
+## Getting Data
+
+bla bla bla...
+
+```{r get_data, cache=TRUE}
+WEBSITES = readWebsites()
+STATES = readStates()
+COLORS = readColors()
+STATES = merge(STATES, COLORS, all = T, by = "state")
+DT = readData()
+
+# sanity_check
+colnames(DT)
+```
+
+## Manipulating Data
+
+bla bla bla...
+
+```{r clean_data, cache=TRUE}
+# extract categories from data (original labeling)
+CATEGORIES = unique(DT$category)
+# apply new names with a more exact meaning
+NEW_NAMES <- as.character(read.csv(NAMES_PATH)$subject)
+# split PUBLISH_DATE to publish_date and publish_time
+DT[,publish_time := sapply(strsplit(publish_date,' '), "[", 2)][,publish_date := sapply(strsplit(publish_date,' '), "[", 1)]
+
+DT[, publish_date := as.Date(publish_date)]
+DT[, category := as.factor(category)]
+
+# add states (of origin of sources):
+setkey(DT,site)
+setkey(WEBSITES, site)
+DT = merge(DT,WEBSITES, all = F, all.x = T)
+
+SITES = unique(DT$site)
+
+# set the key to publish_date
+setkey(DT, publish_date)
+# get full date range (in days)
+DATES = getDates(DT)
+# add rows for days between observations, a Date filter might be agged.
+# the DT is changed by reference
+
+# if nessecary, filter out days before some date
+# DATES = filterDates(DATES, filter = "2016-01-01")
+# set the full range of desired dates to DT (NA is filled in rows w/o observations)
+DT = setDates(DT, DATES)
+
+# sanity_check
+colnames(DT)
+```
+
+```{r, dim_reduction, cache=TRUE}
+DTdim <- DT[,.(article_id, publish_date, category, site, state, title, article_text)]
+
+# DTdim[, sentencesInCategoryPerDay :=.N, by = .(article_id, category)]
+
+DTdim <- unique(DTdim)
+
+# sanity_check
+colnames(DTdim)
+```
+
+
+```{r, add_metrics, cache=TRUE}
+# add metrics for display:
+getArticleCountPerCategory(DTdim)
+getNationwideCount(DTdim)
+getLocalCount(DTdim)
+
+getArticleCountPerCategoryPerSite(DTdim)
+getArticleCountPerSite(DTdim)
+getNormCountPerSite(DTdim)
+
+getCountPerColor(DTdim)
+getScorePerGroup(DTdim)
+
+DTdim[NationwideScore > 0, sourceGroup := as.factor("nationwide")]
+DTdim[AllStatesScore > 0, sourceGroup := as.factor("AllStates")]
+DTdim[BlueScore > 0, sourceGroup := as.factor("blue")]
+DTdim[RedScore > 0, sourceGroup := as.factor("red")]
+DTdim[PurpleScore > 0, sourceGroup := as.factor("purple")]
+
+# sanity_check
+colnames(DTdim)
+```
+
+## Select data for analysis
+```{r tidy_data}
+
+# select categories:
+interesting = c(11,25,13,23,16,22,3,19,7,14,1,21,12,17,26,28)
+groups = c("Nationwide", "AllStates", "Blue", "Red", "Purple")
+
+setkey(DTdim, "category", "publish_date")
+DTdim <- DTdim[CATEGORIES[interesting]]
+
+byTopics = lapply(seq_along(interesting), function(i){
+        setDates(DTdim[category == CATEGORIES[interesting][i]], DATES)        
+})
+```
+
+``` {r per_topic}
+
+byTopics[[1]] <- melt(data = byTopics[[1]], measure.vars = paste0(groups,"Score"))
+byTopics[[1]][, value := na.fill(value,0)]
+
+qplot(data = byTopics[[1]], x = publish_date, y = value) + geom_line() + facet_wrap(~sourceGroup, ncol = 2)
+
+```
+
+## Desctiptive Statistics
+
+bla bla bla...
+use shiny for this part (same analysis for each ts)
+
+
+## Analysis
+
+description of the model...
+
+## Results
