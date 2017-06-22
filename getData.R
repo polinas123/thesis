@@ -1,3 +1,8 @@
+<<<<<<< HEAD
+readWebsites = function() {
+        
+        states <- fread(file = WEBSITES_PATH, 
+=======
 cleanData = function(dt) {
         # CLEANING PROCEDURES:
         # remove NA values
@@ -96,20 +101,31 @@ readData = function(filesdir = DATA_PATH) {
 readWebsites = function() {
         
         states = fread(file = WEBSITES_PATH, 
+>>>>>>> 8f92d9f894673e6d046d0e15b4d9935dc99fe520
                        sep = ",", 
                        header = T, 
                        select = c(1:3),
                        col.names = c("site", "country", "state"),
                        key = "country",
                        data.table = T)
+<<<<<<< HEAD
+        states <- states["US"]
+        states[, country:=NULL]
+        states <- data.table:::unique.data.table(states, by = "site")
+=======
         states = states["US"]
         states[, country:=NULL]
         states = data.table:::unique.data.table(states, by = "site")
+>>>>>>> 8f92d9f894673e6d046d0e15b4d9935dc99fe520
 }
 
 readStates = function() {
         
+<<<<<<< HEAD
+        states <- fread(file = STATES_PATH, 
+=======
         states = fread(file = STATES_PATH, 
+>>>>>>> 8f92d9f894673e6d046d0e15b4d9935dc99fe520
                        sep = ",", 
                        header = T, 
                        select = c(1:2),
@@ -120,7 +136,11 @@ readStates = function() {
 
 readColors = function() {
         
+<<<<<<< HEAD
+        colors <- fread(file = COLORS_PATH, 
+=======
         colors = fread(file = COLORS_PATH, 
+>>>>>>> 8f92d9f894673e6d046d0e15b4d9935dc99fe520
                        sep = ",", 
                        header = T, 
                        select = c(1,10),
@@ -130,6 +150,34 @@ readColors = function() {
 }
 
 getDates = function(DT){
+<<<<<<< HEAD
+        
+        #calculate and retunr full dates range as char vector
+        setkey(DT, "publish_date")
+        startDate <- as.Date(DT[,publish_date[1]])
+        endDate <- as.Date(DT[,publish_date[.N]])
+        
+        DATES <- seq.Date(startDate, endDate, by = "days")
+        DATES <- as.data.table(DATES)
+        colnames(DATES) <- "publish_date"
+        
+        return(DATES)
+}
+
+setDates = function(DT, DATES) {
+        
+        setkey(DATES, "publish_date")
+        setkey(DT, "publish_date")
+        
+        DT <-  merge(DT, DATES, all.y = T, by = "publish_date")
+        
+        # DT <- na.fill(DT, 0) is very slow...
+        lapply( seq(11,230,1), function(j){
+                set(DT, which(is.na(DT[[j]])), j, 0)
+        })
+        
+        return(DT)
+=======
         #calculate and retunr full dates range as char vector
         # OR AS XTS index
         # ALTERNATELY: ADD NA ROWS TO DT.
@@ -155,4 +203,5 @@ setDates = function(DT, DATES) {
         setkey(DT, publish_date)
         
         DT = merge(DT, dates, all.y = T, by = "publish_date")
+>>>>>>> 8f92d9f894673e6d046d0e15b4d9935dc99fe520
 }

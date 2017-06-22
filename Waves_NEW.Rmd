@@ -1,0 +1,70 @@
+---
+title: "Waves_NEW"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(cache = TRUE)
+
+# check dependencies
+packages = c("readxl",
+             "data.table",
+             "forecast",
+             "ggplot2",
+             "xts")
+lapply(packages, require, character.only = T)
+
+# load sources
+source("paths.R")
+source("getData.R")
+source("tidyData.R")
+
+```
+
+```{r read_data}
+# link to a 0.6GB file including all data, no texts, in CSV format
+DT <- fread(input = paste(NEW_DATA_PATH, "all_files_no_text.csv", sep = "/"), sep = ",", quote = '"')
+```
+```{r context}
+# filter only the context(s) of interest
+setkey(DT, "context")
+DT <- DT["American Politics",]
+```
+
+```{r site}
+# read only US websites names
+WEBSITES = readWebsites()
+# filter DT by WEBSITES
+DT <- DT[site %in% WEBSITES$site,]
+```
+
+```{r state}
+# read states list
+STATES = readStates()
+# read association of colors to states
+COLORS = readColors()
+STATES = merge(STATES, COLORS, all = T, by = "state")
+# add states (of origin of sources):
+setkey(DT,site)
+setkey(WEBSITES, site)
+DT = merge(DT,WEBSITES, all = F, all.x = T)
+```
+
+```{r dates}
+# split PUBLISH_DATE to publish_date and publish_time
+DT[,publish_time := sapply(strsplit(publish_date,' '), "[", 2)][,publish_date := sapply(strsplit(publish_date,' '), "[", 1)]
+DT[, publish_date := as.Date(publish_date)]
+
+# get full date range (in days)
+DATES <-  getDates(DT)
+
+# do padding of dates set missing dates values to 0 (instead fo NA)
+DT <- setDates(DT, DATES)
+```
+
+        # cut dates before 2016:
+        dt = dt[publish_date >= strptime(
+                "2016-01-01", 
+                format="%y%y-%m-%d"),]
+
