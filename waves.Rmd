@@ -122,7 +122,7 @@ byTopics = lapply(seq_along(interesting), function(i){
 })
 ```
 
-``` {r per_topic}
+``` {r melt}
 
 byTopics[[1]] <- melt(data = byTopics[[1]], measure.vars = paste0(groups,"Score"))
 byTopics[[1]][, value := na.fill(value,0)]

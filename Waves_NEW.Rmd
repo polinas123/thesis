@@ -62,3 +62,31 @@ DATES <-  getDates(DT)
 # do padding of dates set missing dates values to 0 (instead fo NA)
 DT <- setDates(DT, DATES)
 ```
+
+```{r topics}
+# extract list of topics in dataset
+TOPICS <- colnames(DT)[11:230]
+
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        DT[, c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
+})
+```
+
+```{r scores}
+#getAggregated() function calls
+lapply(seq_along(TOPICS), function(i){
+        articleCount <- getAggregated(byTopic[[i]])$N
+        articleCountPerSite <- getAggregated(byTopic[[i]], grpby = "site")
+})
+```
+
+``` {r melt}
+
+byTopics[[1]] <- melt(data = byTopics[[1]], measure.vars = paste0(groups,"Score"))
+byTopics[[1]][, value := na.fill(value,0)]
+```
+
+```{r plot}
+qplot(data = byTopics[[1]], x = publish_date, y = value) + geom_line() + facet_wrap(~sourceGroup, ncol = 2)
+
+```
