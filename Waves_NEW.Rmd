@@ -62,9 +62,3 @@ DATES <-  getDates(DT)
 # do padding of dates set missing dates values to 0 (instead fo NA)
 DT <- setDates(DT, DATES)
 ```
-
-        # cut dates before 2016:
-        dt = dt[publish_date >= strptime(
-                "2016-01-01", 
-                format="%y%y-%m-%d"),]
-
