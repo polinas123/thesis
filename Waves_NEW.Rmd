@@ -73,14 +73,28 @@ byTopic <- lapply(seq_along(TOPICS), function(i){
 ```
 
 ```{r scores}
-#getAggregated() function calls
-lapply(seq_along(TOPICS), function(i){
-        articleCount <- getAggregated(byTopic[[i]])$N
-        articleCountPerSite <- getAggregated(byTopic[[i]], grpby = "site")
+# how many articles per day per site? (returns list topics)
+articleCountPerSite <- lapply(seq_along(TOPICS), function(i){
+        dt <- getAggregated(byTopic[[i]], grpby = "site")
+        colnames(dt)[3] <- TOPICS[i]
+        return(dt)
 })
+
+# "cbindlist"
+counts <- do.call(cbind,articleCountPerSite)[,.SD,.SDcols=unique(unlist(lapply(articleCountPerSite,names)))]
+
+# sum rows - to get daily articles per site (all topics)
+TotalArticleCountPerSite <- counts[, rowSums(.SD), .SDcols = colnames(counts)[3:222]]
+
+# calculate daily Salience per site
+lapply(seq_along(TOPICS), function(i){
+        articleCountPerSite[[i]][, salience := mget(TOPICS[i])]
+# articleCountPerSite[[1]][, salience := salience/TotalArticleCountPerSite]
+})
+# calsulate everything for state level...
 ```
 
-``` {r melt}
+``` {r group}
 
 byTopics[[1]] <- melt(data = byTopics[[1]], measure.vars = paste0(groups,"Score"))
 byTopics[[1]][, value := na.fill(value,0)]
