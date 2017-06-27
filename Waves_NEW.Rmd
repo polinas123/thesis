@@ -153,24 +153,25 @@ byTopic <- lapply(seq_along(TOPICS), function(i){
 ```{r padding}
 # do padding of dates set missing dates values to 0 (instead fo NA)
 byTopic <- lapply(seq_along(TOPICS), function(i){
-        setDates(byTopic[[i]], DATES, cols = colnames(byTopic[[i]])[10:14])
+        setDates(byTopic[[i]], DATES)
 })
 ```
 
 
 ```{r group}
+scores <- colnames(byTopic[[1]])[8:14]
 
-byTopics[[1]] <- melt(data = byTopics[[1]], measure.vars = colnames(byTopics[[i]][10:14]))
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        melt(data = byTopic[[i]], measure.vars = scores)
+})
 # byTopics[[1]][, value := na.fill(value,0)]
 ```
 ```{r descriptive}
-DT[, sapply(.SD, summary), .SDcols = ]
+DT[, sapply(.SD, summary), .SDcols = scores]
 ```
 
 
 ```{r plot}
-
-# shiny descriptive plots
 qplot(data = byTopics[[1]], x = publish_date, y = value) + geom_line() + facet_wrap(~sourceGroup, ncol = 2)
 
 ```

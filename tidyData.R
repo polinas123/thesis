@@ -20,10 +20,10 @@ setDates = function(DT, DATES, cols) {
         
         DT <-  merge(DT, DATES, all.y = T, by = "publish_date")
         
-        DT <- DT[, (cols) := sapply(.SD, na.fill, fill = 0), .SDcols = cols]
-        # lapply( which(colnames(DT) == cols), function(j){
-        #         set(DT, which(is.na(DT[[j]])), j, 0)
-        # })
+        #DT <- DT[, (cols) := sapply(.SD, na.fill, fill = 0), .SDcols = cols]
+        lapply(seq(8,14,1), function(j){
+                set(DT, which(is.na(DT[[j]])), j, 0)
+        })
 
         return(DT)
 }
