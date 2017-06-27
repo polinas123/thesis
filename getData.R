@@ -48,17 +48,3 @@ getDates = function(DT){
         return(DATES)
 }
 
-setDates = function(DT, DATES) {
-        
-        setkey(DATES, "publish_date")
-        setkey(DT, "publish_date")
-        
-        DT <-  merge(DT, DATES, all.y = T, by = "publish_date")
-        
-        # DT <- na.fill(DT, 0) is very slow...
-        lapply( seq(11,230,1), function(j){
-                set(DT, which(is.na(DT[[j]])), j, 0)
-        })
-        
-        return(DT)
-}

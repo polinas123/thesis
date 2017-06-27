@@ -6,6 +6,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(include = FALSE)
 
 # check dependencies
 packages = c("readxl",
@@ -58,49 +59,118 @@ DT[, publish_date := as.Date(publish_date)]
 
 # get full date range (in days)
 DATES <-  getDates(DT)
-
-# do padding of dates set missing dates values to 0 (instead fo NA)
-DT <- setDates(DT, DATES)
 ```
 
 ```{r topics}
 # extract list of topics in dataset
-TOPICS <- colnames(DT)[11:230]
+topicCols <- colnames(DT)[c(11:19, 21:230)]
+# select topics with more than 30 data points
+relevant <- sapply(seq_along(topicCols), function(i) {length(unique(DT[, get(topicCols[i])]))}) > 30
+# set TOPICS for relevant topics only
+TOPICS <- topicCols[relevant]
 
 byTopic <- lapply(seq_along(TOPICS), function(i){
-        DT[, c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
+        DT[!is.na(get(TOPICS[i])), c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
+})
+```
+
+```{r counts}
+
+# how many articles per day per site? (returns list of topics)
+articleCountPerSite <- lapply(seq_along(TOPICS), function(i){
+        getAggregated(byTopic[[i]], grpby = "site")
+})
+# how many articles per day per state? (returns list of topics)
+articleCountPerState <- lapply(seq_along(TOPICS), function(i){
+        getAggregated(byTopic[[i]], grpby = "state")
+})
+
+# check if there are no rows without topic in DT (sanity)
+if (length(DT[, rowSums(.SD, na.rm = T), .SDcols = TOPICS]) == nrow(DT)){
+        TotalArticleCountPerSite <- getAggregated(DT, grpby = "site")
+        TotalArticleCountPerState <- getAggregated(DT, grpby = "state")
+}
+
+# calculate daily Salience per site
+salience.site <- lapply(seq_along(TOPICS), function(i){
+        tmp <- merge(x = articleCountPerSite[[i]], 
+                     y = TotalArticleCountPerSite,
+                     by = c("publish_date", "site"),
+                     all.x = T)
+        tmp[, SaliencePerSite := N.x/N.y]
+        return(tmp)
+})
+
+# calculate daily Salience per state
+salience.state <- lapply(seq_along(TOPICS), function(i){
+        tmp <- merge(x = articleCountPerState[[i]], 
+                     y = TotalArticleCountPerState,
+                     by = c("publish_date", "state"),
+                     all.x = T)
+        tmp[, SaliencePerState := N.x/N.y]
+        return(tmp)
 })
 ```
 
 ```{r scores}
-# how many articles per day per site? (returns list topics)
-articleCountPerSite <- lapply(seq_along(TOPICS), function(i){
-        dt <- getAggregated(byTopic[[i]], grpby = "site")
-        colnames(dt)[3] <- TOPICS[i]
-        return(dt)
+
+# add states (of origin of sources):
+setkey(WEBSITES, site)
+
+salience <- lapply(seq_along(TOPICS), function(i){
+        setkey(salience.site[[i]], site)
+        tmp <- merge(salience.site[[i]], WEBSITES, all = F, all.x = T)
+        merge(x = tmp[, .(publish_date, SaliencePerSite, site, state)], y = salience.state[[i]][, .(publish_date, SaliencePerState, state)], by = c("publish_date", "state"))
 })
 
-# "cbindlist"
-counts <- do.call(cbind,articleCountPerSite)[,.SD,.SDcols=unique(unlist(lapply(articleCountPerSite,names)))]
-
-# sum rows - to get daily articles per site (all topics)
-TotalArticleCountPerSite <- counts[, rowSums(.SD), .SDcols = colnames(counts)[3:222]]
-
-# calculate daily Salience per site
+setkey(STATES, color)
+# calculate daily averages
 lapply(seq_along(TOPICS), function(i){
-        articleCountPerSite[[i]][, salience := mget(TOPICS[i])]
-# articleCountPerSite[[1]][, salience := salience/TotalArticleCountPerSite]
+# salience per site
+        salience[[i]][, DailySaliencePerSite := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
+# salience per state
+        salience[[i]][, DailySaliencePerState := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerState"]
+# group sources by states:
+        setkey(salience[[i]], "state")
+# salience in NATIONWIDE group
+        salience[[i]]["Nationwide", DailyNationwideSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
+# salience in LOCAL group
+        salience[[i]][!"Nationwide", DailyLocalSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
+# salience in BLUE group
+        salience[[i]][STATES["Blue", state], DailyBlueSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
+# salience in RED group
+        salience[[i]][STATES["Red", state], DailyRedSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
+# salience in PURPLE group
+        salience[[i]][STATES["Purple", state], DailyPurpleSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
 })
-# calsulate everything for state level...
+
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        merge(x = byTopic[[i]], y = salience[[i]], by = c("publish_date", "site", "state"), all = T)
+})
+
 ```
 
-``` {r group}
-
-byTopics[[1]] <- melt(data = byTopics[[1]], measure.vars = paste0(groups,"Score"))
-byTopics[[1]][, value := na.fill(value,0)]
+```{r padding}
+# do padding of dates set missing dates values to 0 (instead fo NA)
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        setDates(byTopic[[i]], DATES, cols = colnames(byTopic[[i]])[10:14])
+})
 ```
+
+
+```{r group}
+
+byTopics[[1]] <- melt(data = byTopics[[1]], measure.vars = colnames(byTopics[[i]][10:14]))
+# byTopics[[1]][, value := na.fill(value,0)]
+```
+```{r descriptive}
+DT[, sapply(.SD, summary), .SDcols = ]
+```
+
 
 ```{r plot}
+
+# shiny descriptive plots
 qplot(data = byTopics[[1]], x = publish_date, y = value) + geom_line() + facet_wrap(~sourceGroup, ncol = 2)
 
 ```

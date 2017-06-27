@@ -6,15 +6,24 @@ getAggregated = function(DT, selectcol = NULL, selectval = NULL, aggrfun = ".N",
                 DT[selectval, .N, by = c("publish_date", grpby)]
         } else {
                 if (!is.null(grpby)){
-                        setkeyv(DT, grpby)
-                        DT[!NA_character_, .N, by = c("publish_date", grpby)]
+                        DT[, .N, by = c("publish_date", grpby)]
                 } else {
                         DT[, .N, by = c("publish_date")]
                 }
         }
 }
 
-setAggregated = function(name, DT, selectcol = NULL, selectval = NULL, aggrfun = ".N", grpby = NULL){
-        # add columns by reference
+setDates = function(DT, DATES, cols) {
         
+        setkey(DATES, "publish_date")
+        setkey(DT, "publish_date")
+        
+        DT <-  merge(DT, DATES, all.y = T, by = "publish_date")
+        
+        DT <- DT[, (cols) := sapply(.SD, na.fill, fill = 0), .SDcols = cols]
+        # lapply( which(colnames(DT) == cols), function(j){
+        #         set(DT, which(is.na(DT[[j]])), j, 0)
+        # })
+
+        return(DT)
 }
