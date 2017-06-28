@@ -24,9 +24,14 @@ source("tidyData.R")
 ```
 
 ```{r read_data}
+if (!file.exists("raw.Rda")){
 # link to a 0.6GB file including all data, no texts, in CSV format
-DT <- fread(input = paste(NEW_DATA_PATH, "all_files_no_text.csv", sep = "/"), sep = ",", quote = '"')
+        DT <- fread(input = paste(NEW_DATA_PATH, "all_files_no_text.csv", sep = "/"), sep = ",", quote = '"')
+} else {
+        load("raw.Rda")
+}
 ```
+
 ```{r context}
 # filter only the context(s) of interest
 setkey(DT, "context")
@@ -157,21 +162,23 @@ byTopic <- lapply(seq_along(TOPICS), function(i){
 })
 ```
 
+```{r descriptive}
+scores <- colnames(byTopic[[1]])[8:14]
+byTopic[[1]][, sapply(.SD, summary), .SDcols = scores]
+```
 
 ```{r group}
-scores <- colnames(byTopic[[1]])[8:14]
 
 byTopic <- lapply(seq_along(TOPICS), function(i){
         melt(data = byTopic[[i]], measure.vars = scores)
 })
 # byTopics[[1]][, value := na.fill(value,0)]
 ```
-```{r descriptive}
-DT[, sapply(.SD, summary), .SDcols = scores]
-```
+
 
 
 ```{r plot}
 qplot(data = byTopics[[1]], x = publish_date, y = value) + geom_line() + facet_wrap(~sourceGroup, ncol = 2)
 
+# add shiny app/ slidify
 ```
