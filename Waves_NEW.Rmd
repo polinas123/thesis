@@ -13,13 +13,19 @@ packages = c("readxl",
              "data.table",
              "forecast",
              "ggplot2",
-             "xts")
+             "xts",
+             "tsoutliers",
+             "timeDate",
+             "cowplot",
+             "lmtest",
+             "FinTS")
 lapply(packages, require, character.only = T)
 
 # load sources
 source("paths.R")
 source("getData.R")
 source("tidyData.R")
+source("analyzeData.R")
 
 ```
 
@@ -61,6 +67,9 @@ DT = merge(DT,WEBSITES, all = F, all.x = T)
 # split PUBLISH_DATE to publish_date and publish_time
 DT[,publish_time := sapply(strsplit(publish_date,' '), "[", 2)][,publish_date := sapply(strsplit(publish_date,' '), "[", 1)]
 DT[, publish_date := as.Date(publish_date)]
+
+# cut dates before 2016:
+DT = DT[publish_date >= as.Date("2016-01-01"),]
 
 # get full date range (in days)
 DATES <-  getDates(DT)
@@ -163,22 +172,185 @@ byTopic <- lapply(seq_along(TOPICS), function(i){
 ```
 
 ```{r descriptive}
-scores <- colnames(byTopic[[1]])[8:14]
-byTopic[[1]][, sapply(.SD, summary), .SDcols = scores]
+scores <- colnames(byTopic[[i]])[8:14]
+SUMMARY <- lapply(seq_along(TOPICS), function(i){
+        byTopic[[i]][, sapply(.SD, summary), .SDcols = scores]
+})
 ```
 
 ```{r group}
-
-byTopic <- lapply(seq_along(TOPICS), function(i){
+# melt data for plotting with facets:
+byTopic_m <- lapply(seq_along(TOPICS), function(i){
         melt(data = byTopic[[i]], measure.vars = scores)
 })
-# byTopics[[1]][, value := na.fill(value,0)]
 ```
 
+```{r zeros}
+# remove leading zeros
+byTopic_m <- lapply(seq_along(TOPICS), function(i){
+        byTopic_m[[i]][(byTopic_m[[i]][, cumsum(value), by = variable] != 0)[,2]]
+})
+```
 
+```{r hist_plot}
+HIST <- lapply(seq_along(TOPICS), function(i){
+        qplot(data = byTopic_m[[i]], x = value, geom = "histogram") + facet_wrap(~variable, ncol = 3)
+})
+```
 
-```{r plot}
-qplot(data = byTopics[[1]], x = publish_date, y = value) + geom_line() + facet_wrap(~sourceGroup, ncol = 2)
+```{r ts_plot}
+TS <- lapply(seq_along(TOPICS), function(i){
+        qplot(data = byTopic_m[[i]], x = publish_date, y = value, geom = "line") + facet_wrap(~variable, ncol = 1)
+})
+```
 
-# add shiny app/ slidify
+```{r diff_plot}
+DIFF <- lapply(seq_along(TOPICS), function(i){
+        qplot(data = byTopic_m[[i]], x = publish_date, y = c(0, diff(value)), geom = "line") + facet_wrap(~variable, ncol = 1)
+})
+```
+
+```{r ts_vs_diff}
+TSvsDIFF <- lapply(seq_along(TOPICS), function(i){
+        plot_grid(TS[[i]], DIFF[[i]], align='h', labels=c('Original', 'Diff'))
+})
+```
+
+```{r diff_descriptive}
+DIFF_SUMMARY <- lapply(seq_along(TOPICS), function(i){
+        summary(byTopic[[i]][, sapply(.SD, diff), .SDcols = scores])
+})
+```
+
+```{r diff_hist_plot}
+DIFF_HIST <- lapply(seq_along(TOPICS), function(i){
+        qplot(data = byTopic_m[[i]], x = c(0,diff(value)), geom = "histogram") + facet_wrap(~variable, ncol = 3)
+})
+```
+
+```{r acf_plot}
+ACF <- lapply(seq_along(TOPICS), function(i){
+        lapply(scores, function(j){
+                Acf(x = byTopic_m[[i]][variable == j, value], plot = F)
+        })
+})
+```
+
+```{r pacf_plot}
+ACF <- lapply(seq_along(TOPICS), function(i){
+        lapply(scores, function(j){
+                Acf(x = byTopic_m[[i]][variable == j, value], 
+                    plot = F,
+                    type = "partial")
+        })
+})
+```
+
+```{r diff_acf_plot}
+ACF <- lapply(seq_along(TOPICS), function(i){
+        lapply(scores, function(j){
+                Acf(x = byTopic_m[[i]][variable == j, diff(value)], plot = F)
+        })
+})
+
+```
+
+```{r diff_pacf_plot}
+ACF <- lapply(seq_along(TOPICS), function(i){
+        lapply(scores, function(j){
+                Acf(x = byTopic_m[[i]][variable == j, diff(value)], plot = F, type = "partial")
+        })
+})
+
+```
+
+```{r weekends}
+lapply(seq_along(TOPICS), function(i){
+        byTopic_m[[i]][weekdays(publish_date) %in% c("Saturday", "Sunday"), weekend := 1]
+        byTopic_m[[i]][, weekend := na.fill(weekend, 0)]
+})
+```
+
+```{r weekdays}
+lapply(seq_along(TOPICS), function(i){
+        byTopic_m[[i]][, weekday := weekdays(publish_date)]
+        byTopic_m[[i]][, weekday := as.factor(weekday)]
+        byTopic_m[[i]][, sort(weekdays(Sys.Date()+0:6))[2:7] := data.table(model.matrix(~weekday)[,2:7])]
+        byTopic_m[[i]][, Friday := ifelse(weekday == "Friday", 1, 0)]
+})
+```
+
+```{r holidays}
+HOLIDAYS <- as.Date(holiday(year = 2016, Holiday = c(listHolidays(pattern = "US"), listHolidays(pattern = "Easter"))))
+lapply(seq_along(TOPICS), function(i){
+        byTopic_m[[i]][publish_date %in% HOLIDAYS, holiday := 1]
+        byTopic_m[[i]][, holiday := na.fill(holiday, 0)]
+})
+```
+
+```{r interesting}
+interesting <- c(8, 18, 32, 37)
+```
+
+```{r arima}
+ARIMA <- lapply(seq_along(TOPICS[interesting]), function(i){
+        lapply(scores, function(j){
+                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
+                
+                t <- ts(dt[, value])
+                # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
+                
+                benchmark <- auto.arima(y = t)
+                weekday <- auto.arima(y = t, xreg = dt[, c(weekdays(as.Date("2017-07-16")+1:6))])
+                weekend <- auto.arima(y = t, xreg = dt$weekend)
+                holiday <- auto.arima(y = t, xreg = dt$holiday)
+
+        return(list(benchmark$aic, weekday$aic, weekend$aic, holiday$aic))
+        })
+})
+```
+
+```{r serial_test}
+SERIALCORR <- lapply(seq_along(TOPICS), function(i){
+        r <- lapply(1:7, function(j){
+                bgtest(ARIMA[[i]][[j]]$residuals ~ 1)        
+        })
+        return(r)
+})
+```
+
+```{r arch_test}
+ARCH <- lapply(seq_along(TOPICS), function(i){
+        r <- lapply(1:7, function(j){
+                ArchTest(ARIMA[[i]][[j]]$residuals)        
+        })
+        return(r)
+})
+```
+
+```{r normality_test}
+NORM <- lapply(seq_along(TOPICS), function(i){
+        r <- lapply(1:7, function(j){
+                JarqueBera.test(ARIMA[[i]][[j]]$residuals)        
+        })
+        return(r)
+})
+```
+
+```{r residual_acf}
+RESID_ACF <- lapply(seq_along(TOPICS), function(i){
+        r <- lapply(1:7, function(j){
+                Acf(ARIMA[[i]][[j]]$residuals, plot = F)        
+        })
+        return(r)
+})
+```
+
+```{r residual_pacf}
+RESID_PACF <- lapply(seq_along(TOPICS), function(i){
+        r <- lapply(1:7, function(j){
+                Acf(ARIMA[[i]][[j]]$residuals, plot = F, type = "partial")        
+        })
+        return(r)
+})
 ```
