@@ -292,22 +292,99 @@ lapply(seq_along(TOPICS), function(i){
 interesting <- c(8, 18, 32, 37)
 ```
 
-```{r arima}
-ARIMA <- lapply(seq_along(TOPICS[interesting]), function(i){
-        lapply(scores, function(j){
+```{r arima_basic}
+ARIMA <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
                 dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
                 
                 t <- ts(dt[, value])
                 # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
                 
-                benchmark <- auto.arima(y = t)
-                weekday <- auto.arima(y = t, xreg = dt[, c(weekdays(as.Date("2017-07-16")+1:6))])
-                weekend <- auto.arima(y = t, xreg = dt$weekend)
-                holiday <- auto.arima(y = t, xreg = dt$holiday)
+                benchmark <- auto.arima(y = t, d = 1)
+                weekday <- auto.arima(y = t, xreg = dt[, c(weekdays(as.Date("2017-07-16")+1:6))], d = 1)
+                weekend <- auto.arima(y = t, xreg = dt$weekend, d = 1)
+                holiday <- auto.arima(y = t, xreg = dt$holiday, d = 1)
 
-        return(list(benchmark$aic, weekday$aic, weekend$aic, holiday$aic))
+        return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
         })
+setNames(byScore, scores)
 })
+
+ARIMA <- setNames(ARIMA, TOPICS)
+```
+
+```{r arima_seasonal}
+S_ARIMA <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
+                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
+                
+                t <- ts(dt[, value], freq = 7)
+                # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
+                benchmark <- tryCatch({
+                        auto.arima(y = t, xreg = seasonaldummy(t), d = 1)
+                }, error=function(e) e)
+                
+                weekday <- tryCatch({
+                        auto.arima(y = t, xreg = cbind(seasonaldummy(t), dt[, c(weekdays(as.Date("2017-07-16")+1:6))]), d = 1)
+                        }, error=function(e) e)
+                weekend <- tryCatch({
+                        auto.arima(y = t, xreg = cbind(seasonaldummy(t), dt$weekend), d = 1)
+                }, error=function(e) e)
+                holiday <- tryCatch({
+                        auto.arima(y = t, xreg = cbind(seasonaldummy(t), dt$holiday), d = 1)
+                }, error=function(e) e)
+                
+                
+        print (paste("finished", j, sep = " "))
+        return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
+        })
+        print (paste("finished", TOPICS[[i]], sep = " "))
+setNames(byScore, scores)
+})
+
+S_ARIMA <- setNames(S_ARIMA, TOPICS)
+```
+
+```{r arima_outliers_basic}
+TSO_ARIMA <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
+                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
+                
+                t <- ts(dt[, value])
+                # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
+                
+                benchmark <- tryCatch({tso(y = t, args.tsmethod = list(d = 1))}, error=function(e) e)
+                weekday <- tryCatch({ tso(y = t, xreg = dt[, c(weekdays(as.Date("2017-07-16")+1:6))], args.tsmethod = list(d = 1))}, error=function(e) e)
+                weekend <- tryCatch({ tso(y = t, xreg = dt$weekend, args.tsmethod = list(d = 1))}, error=function(e) e)
+                holiday <- tryCatch({ tso(y = t, xreg = dt$holiday, args.tsmethod = list(d = 1))}, error=function(e) e)
+
+        return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
+        })
+setNames(byScore, scores)
+})
+
+TSO_ARIMA <- setNames(TSO_ARIMA, TOPICS)
+```
+
+```{r arima_outliers_seasonal}
+TSO_S_ARIMA <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
+                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
+                
+                t <- ts(dt[, value], freq = 7)
+                # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
+                
+                benchmark <- tryCatch({ tso(y = t, xreg = seasonaldummy(t), args.tsmethod = list(d = 1))}, error=function(e) e)
+                weekday <- tryCatch({ tso(y = t, xreg = cbind(seasonaldummy(t), dt[, c(weekdays(as.Date("2017-07-16")+1:6))]), args.tsmethod = list(d = 1))}, error=function(e) e)
+                weekend <- tryCatch({ tso(y = t, xreg = cbind(seasonaldummy(t), dt$weekend), args.tsmethod = list(d = 1))}, error=function(e) e)
+                holiday <- tryCatch({ tso(y = t, xreg = cbind(seasonaldummy(t), dt$holiday), args.tsmethod = list(d = 1))}, error=function(e) e)
+
+        return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
+        })
+setNames(byScore, scores)
+})
+
+TSO_S_ARIMA <- setNames(TSO_S_ARIMA, TOPICS)
 ```
 
 ```{r serial_test}
