@@ -6,7 +6,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 knitr::opts_chunk$set(cache = TRUE)
-knitr::opts_chunk$set(include = FALSE)
+knitr::opts_chunk$set(message = FALSE)
 
 # check dependencies
 packages = c("readxl",
@@ -18,7 +18,8 @@ packages = c("readxl",
              "timeDate",
              "cowplot",
              "lmtest",
-             "FinTS")
+             "FinTS",
+             "DescTools")
 lapply(packages, require, character.only = T)
 
 # load sources
@@ -171,6 +172,16 @@ byTopic <- lapply(seq_along(TOPICS), function(i){
 })
 ```
 
+```{r collection_issues}
+# remove "leadin" 1 values, probably introduced due to collection issues
+start <- DT[,.N, by = .(publish_date, site)][,.N, by = .(publish_date)][N > 10, publish_date][1]
+
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        byTopic[[i]][publish_date >= start,]
+})
+```
+
+
 ```{r descriptive}
 scores <- colnames(byTopic[[i]])[8:14]
 SUMMARY <- lapply(seq_along(TOPICS), function(i){
@@ -228,64 +239,102 @@ DIFF_HIST <- lapply(seq_along(TOPICS), function(i){
 })
 ```
 
+```{r ts_vs_diff_hist}
+HIST_TSvsDIFF <- lapply(seq_along(TOPICS), function(i){
+        plot_grid(HIST[[i]], DIFF_HIST[[i]], align='h', labels=c('Original', 'Diff'))
+})
+```
+
 ```{r acf_plot}
 ACF <- lapply(seq_along(TOPICS), function(i){
-        lapply(scores, function(j){
+        byScore <- lapply(scores, function(j){
                 Acf(x = byTopic_m[[i]][variable == j, value], plot = F)
         })
+        setNames(byScore, scores)
 })
+ACF <- setNames(ACF, TOPICS)
 ```
 
 ```{r pacf_plot}
-ACF <- lapply(seq_along(TOPICS), function(i){
-        lapply(scores, function(j){
+PACF <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
                 Acf(x = byTopic_m[[i]][variable == j, value], 
                     plot = F,
                     type = "partial")
+                
         })
+        setNames(byScore, scores)
 })
+PACF <- setNames(PACF, TOPICS)
 ```
 
 ```{r diff_acf_plot}
-ACF <- lapply(seq_along(TOPICS), function(i){
-        lapply(scores, function(j){
+DIFF_ACF <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
                 Acf(x = byTopic_m[[i]][variable == j, diff(value)], plot = F)
         })
+        setNames(byScore, scores)
 })
+DIFF_ACF <- setNames(DIFF_ACF, TOPICS)
 
 ```
 
 ```{r diff_pacf_plot}
-ACF <- lapply(seq_along(TOPICS), function(i){
-        lapply(scores, function(j){
+DIFF_PACF <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
                 Acf(x = byTopic_m[[i]][variable == j, diff(value)], plot = F, type = "partial")
         })
+        setNames(byScore, scores)
 })
+DIFF_PACF <- setNames(DIFF_PACF, TOPICS)
+```
 
+```{r dummy}
+dummy <- DATES[publish_date >= start]
+
+disp <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "electionDay", "DemEvents", "RepEvents")
 ```
 
 ```{r weekends}
-lapply(seq_along(TOPICS), function(i){
-        byTopic_m[[i]][weekdays(publish_date) %in% c("Saturday", "Sunday"), weekend := 1]
-        byTopic_m[[i]][, weekend := na.fill(weekend, 0)]
-})
+dummy[weekdays(publish_date) %in% c("Saturday", "Sunday"), weekend := 1]
+dummy[, weekend := na.fill(weekend, 0)]
 ```
 
 ```{r weekdays}
-lapply(seq_along(TOPICS), function(i){
-        byTopic_m[[i]][, weekday := weekdays(publish_date)]
-        byTopic_m[[i]][, weekday := as.factor(weekday)]
-        byTopic_m[[i]][, sort(weekdays(Sys.Date()+0:6))[2:7] := data.table(model.matrix(~weekday)[,2:7])]
-        byTopic_m[[i]][, Friday := ifelse(weekday == "Friday", 1, 0)]
-})
+        dummy[, weekday := weekdays(publish_date)]
+        dummy[, weekday := as.factor(weekday)]
+        dummy[, sort(weekdays(Sys.Date()+0:6))[2:7] := data.table(model.matrix(~weekday)[,2:7])]
+        dummy[, Friday := ifelse(weekday == "Friday", 1, 0)]
 ```
 
 ```{r holidays}
-HOLIDAYS <- as.Date(holiday(year = 2016, Holiday = c(listHolidays(pattern = "US"), listHolidays(pattern = "Easter"))))
-lapply(seq_along(TOPICS), function(i){
-        byTopic_m[[i]][publish_date %in% HOLIDAYS, holiday := 1]
-        byTopic_m[[i]][, holiday := na.fill(holiday, 0)]
-})
+# US holidays without election day
+HOLIDAYS <- as.Date(holiday(year = 2016, Holiday = c(listHolidays(pattern = "US")[c(1:4, 6:17)], listHolidays(pattern = "Easter"))))
+
+dummy[publish_date %in% HOLIDAYS, holiday := 1]
+dummy[, holiday := na.fill(holiday, 0)]
+```
+
+```{r elections+debates}
+# US holidays without election day
+ELECTIONS <- c(as.Date("2016-02-01"), as.Date("2016-02-09"), as.Date("2016-02-20"), as.Date("2016-03-01"), as.Date("2016-03-05"), as.Date("2016-03-06"), as.Date("2016-03-08"), as.Date("2016-03-12"), as.Date("2016-03-15"), as.Date("2016-03-22"), as.Date("2016-04-05"), as.Date("2016-04-09"), as.Date("2016-04-19"), as.Date("2016-04-26"), as.Date("2016-05-03"), as.Date("2016-05-10"), as.Date("2016-05-17"), as.Date("2016-05-24"), as.Date("2016-06-07"), as.Date("2016-09-26"), as.Date("2016-10-04"), as.Date("2016-10-09"), as.Date("2016-10-19"), as.Date("2016-11-08"))
+
+dummy[publish_date %in% ELECTIONS, electionDay := 1]
+dummy[, electionDay := na.fill(electionDay, 0)]
+```
+
+```{r democratic}
+DEMS <- c(as.Date("2016-02-27"), as.Date("2016-03-21"),  as.Date("2016-03-26"), as.Date("2016-05-07"), as.Date("2016-06-04"), as.Date("2016-06-05"), as.Date("2016-06-14"), as.Date("2016-07-25"), as.Date("2016-07-26"), as.Date("2016-07-27"), as.Date("2016-07-28"))
+
+dummy[publish_date %in% DEMS, DemEvents := 1]
+dummy[, DemEvents := na.fill(DemEvents, 0)]
+```
+
+```{r republican}
+REPS <- c(as.Date("2016-01-28"), as.Date("2016-02-06"),  as.Date("2016-02-23"), as.Date("2016-02-25"), as.Date("2016-03-03"), as.Date("2016-03-10"), as.Date("2016-04-03"), as.Date("2016-04-16"), as.Date("2016-07-18"), as.Date("2016-07-19"), as.Date("2016-07-20"), as.Date("2016-07-21"))
+
+dummy[publish_date %in% REPS, RepEvents := 1]
+dummy[, RepEvents := na.fill(RepEvents, 0)]
 ```
 
 ```{r interesting}
@@ -295,15 +344,16 @@ interesting <- c(8, 18, 32, 37)
 ```{r arima_basic}
 ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
-                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
-                
-                t <- ts(dt[, value])
-                # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
-                
-                benchmark <- auto.arima(y = t, d = 1)
-                weekday <- auto.arima(y = t, xreg = dt[, c(weekdays(as.Date("2017-07-16")+1:6))], d = 1)
-                weekend <- auto.arima(y = t, xreg = dt$weekend, d = 1)
-                holiday <- auto.arima(y = t, xreg = dt$holiday, d = 1)
+                        
+               dt <- unique(byTopic_m[[i]][variable == j, value, by = .(publish_date)])[, sum(value), by = "publish_date"]
+               colnames(dt)[2] <- "value"
+               
+                t <- ts(unique(dt[, .(publish_date, value)])[,2])
+
+                benchmark <- auto.arima(y = t, d = 1, xreg = dummy[, c("electionDay", "DemEvents", "RepEvents")])
+                weekday <- auto.arima(y = t, xreg = dummy[, disp, with = F], d = 1)
+                weekend <- auto.arima(y = t, xreg = dummy[, .(weekend, electionDay, DemEvents, RepEvents)], d = 1)
+                holiday <- auto.arima(y = t, xreg = dummy[, .(holiday, electionDay, DemEvents, RepEvents)], d = 1)
 
         return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
         })
@@ -316,29 +366,28 @@ ARIMA <- setNames(ARIMA, TOPICS)
 ```{r arima_seasonal}
 S_ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
-                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
+                dt <- unique(byTopic_m[[i]][variable == j, value, by = .(publish_date)])[, sum(value), by = "publish_date"]
+               colnames(dt)[2] <- "value"
+               
+                t <- ts(unique(dt[, .(publish_date, value)])[,2], freq = 7)
                 
-                t <- ts(dt[, value], freq = 7)
-                # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
                 benchmark <- tryCatch({
-                        auto.arima(y = t, xreg = seasonaldummy(t), d = 1)
+                        auto.arima(y = t, d = 1, xreg = dummy[, c("electionDay", "DemEvents", "RepEvents")])
                 }, error=function(e) e)
                 
                 weekday <- tryCatch({
-                        auto.arima(y = t, xreg = cbind(seasonaldummy(t), dt[, c(weekdays(as.Date("2017-07-16")+1:6))]), d = 1)
+                        auto.arima(y = t, xreg = cbind(seasonaldummy(t), dummy[, c("electionDay", "DemEvents", "RepEvents")]), d = 1)
                         }, error=function(e) e)
                 weekend <- tryCatch({
-                        auto.arima(y = t, xreg = cbind(seasonaldummy(t), dt$weekend), d = 1)
+                        auto.arima(y = t, xreg = dummy[, c("weekend", "electionDay", "DemEvents", "RepEvents")], d = 1)
                 }, error=function(e) e)
                 holiday <- tryCatch({
-                        auto.arima(y = t, xreg = cbind(seasonaldummy(t), dt$holiday), d = 1)
+                        auto.arima(y = t, xreg = dummy[, c("holiday", "electionDay", "DemEvents", "RepEvents")], d = 1)
                 }, error=function(e) e)
                 
-                
-        print (paste("finished", j, sep = " "))
         return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
         })
-        print (paste("finished", TOPICS[[i]], sep = " "))
+        
 setNames(byScore, scores)
 })
 
@@ -348,19 +397,21 @@ S_ARIMA <- setNames(S_ARIMA, TOPICS)
 ```{r arima_outliers_basic}
 TSO_ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
-                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
+                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", sort(weekdays(Sys.Date()+0:6))[2:7], "weekend", "holiday","electionDay")])  
                 
                 t <- ts(dt[, value])
                 # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
                 
-                benchmark <- tryCatch({tso(y = t, args.tsmethod = list(d = 1))}, error=function(e) e)
-                weekday <- tryCatch({ tso(y = t, xreg = dt[, c(weekdays(as.Date("2017-07-16")+1:6))], args.tsmethod = list(d = 1))}, error=function(e) e)
-                weekend <- tryCatch({ tso(y = t, xreg = dt$weekend, args.tsmethod = list(d = 1))}, error=function(e) e)
-                holiday <- tryCatch({ tso(y = t, xreg = dt$holiday, args.tsmethod = list(d = 1))}, error=function(e) e)
+                benchmark <- tryCatch({tso(y = t, xreg = dt$electionDay, args.tsmethod = list(d = 1))}, error=function(e) e)
+                weekday <- tryCatch({ tso(y = t, xreg = dt[, c(sort(weekdays(Sys.Date()+0:6))[2:7], electionDay)], args.tsmethod = list(d = 1))}, error=function(e) e)
+                weekend <- tryCatch({ tso(y = t, xreg = dt[,.(weekend,electionDay)], args.tsmethod = list(d = 1))}, error=function(e) e)
+                holiday <- tryCatch({ tso(y = t, xreg = dt[,.(holiday, electionDay)], args.tsmethod = list(d = 1))}, error=function(e) e)
 
-        return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
+        # print (paste("finished", j, sep = " "))
+                return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
         })
-setNames(byScore, scores)
+# print (paste("finished", TOPICS[[i]], sep = " "))
+        setNames(byScore, scores)
 })
 
 TSO_ARIMA <- setNames(TSO_ARIMA, TOPICS)
@@ -369,15 +420,14 @@ TSO_ARIMA <- setNames(TSO_ARIMA, TOPICS)
 ```{r arima_outliers_seasonal}
 TSO_S_ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
-                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", weekdays(as.Date("2017-07-16")+1:6), "weekend", "holiday")])  
+                dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", sort(weekdays(Sys.Date()+0:6))[2:7], "weekend", "holiday", "electionDay")])  
                 
                 t <- ts(dt[, value], freq = 7)
-                # reg <- cbind(seasonaldummy(t), dt[, .(weekend, holiday)])
                 
-                benchmark <- tryCatch({ tso(y = t, xreg = seasonaldummy(t), args.tsmethod = list(d = 1))}, error=function(e) e)
-                weekday <- tryCatch({ tso(y = t, xreg = cbind(seasonaldummy(t), dt[, c(weekdays(as.Date("2017-07-16")+1:6))]), args.tsmethod = list(d = 1))}, error=function(e) e)
-                weekend <- tryCatch({ tso(y = t, xreg = cbind(seasonaldummy(t), dt$weekend), args.tsmethod = list(d = 1))}, error=function(e) e)
-                holiday <- tryCatch({ tso(y = t, xreg = cbind(seasonaldummy(t), dt$holiday), args.tsmethod = list(d = 1))}, error=function(e) e)
+                benchmark <- tryCatch({ tso(y = t, xreg = dt$electionDay)}, error=function(e) e)
+                weekday <- tryCatch({ tso(y = t, xreg = cbind(seasonaldummy(t), dt$electionDay))}, error=function(e) e)
+                weekend <- tryCatch({ tso(y = t, xreg = dt[.(weekend, electionDay)])}, error=function(e) e)
+                holiday <- tryCatch({ tso(y = t, xreg = dt[.(holiday, electionDay)])}, error=function(e) e)
 
         return(list(benchmark = benchmark, weekday = weekday, weekend = weekend, holiday = holiday))
         })
