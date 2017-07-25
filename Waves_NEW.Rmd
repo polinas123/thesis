@@ -341,6 +341,11 @@ dummy[, RepEvents := na.fill(RepEvents, 0)]
 interesting <- c(8, 18, 32, 37)
 ```
 
+```{r weekly}
+# how many obs. each day? (given one TS)
+cbind(dummy, as.numeric(t[,1]))[V2 > 0, .N, by = weekday]
+```
+
 ```{r arima_basic}
 ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
@@ -480,4 +485,10 @@ RESID_PACF <- lapply(seq_along(TOPICS), function(i){
         })
         return(r)
 })
+```
+
+```{r irf}
+# irf for MA model
+irf <- sapply(0:6, function(i){ (sum(test$coef^i))*sd(test$residuals)})
+plot(irf, type = "l")
 ```
