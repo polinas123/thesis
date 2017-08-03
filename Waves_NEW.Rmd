@@ -381,16 +381,16 @@ cbind(dummy, as.numeric(t[,1]))[V2 > 0, .N, by = weekday]
 # AR(p) Model: 
 $x_t$ = $\phi$$x_{t-1}$ + $\epsilon_t$
 ```{r arima_basic}
-ARp2_1_0 <- lapply(seq_along(TOPICS), function(i){
+ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
                 t <- ts(byTopic_m[[i]][variable == j, value])
-                model <- auto.arima(y = t, d = 1, max.q = 0, max.p = 2)
+                model <- auto.arima(t)
         })
 })
 ```
 
 # regression with ARIMA errors:
-```{r arima_basic}
+```{r RegArima_basic}
 ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
                
@@ -488,7 +488,7 @@ TSO_S_ARIMA <- setNames(TSO_S_ARIMA, TOPICS)
 ```{r tsdiag}
 DIAGPLOT <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                tsdiag(ARp2_1_0[[i]][[j]])        
+                tsdiag(ARIMA_BASIC[[i]][[j]])        
         })
         return(r)
 })
@@ -498,7 +498,7 @@ DIAGPLOT <- lapply(seq_along(TOPICS), function(i){
 ```{r serial_test}
 SERIALCORR <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                bgtest(ARp2_1_0[[i]][[j]]$residuals ~ 1, order = 7)        
+                bgtest(ARIMA_BASIC[[i]][[j]]$residuals ~ 1, order = 7)        
         })
         names(r) <- scores
         return(r)
@@ -509,7 +509,7 @@ names(SERIALCORR) <- TOPICS
 ```{r arch_test}
 ARCH <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                ArchTest(ARp2_1_0[[i]][[j]]$residuals, lags = 7)        
+                ArchTest(ARIMA_BASIC[[i]][[j]]$residuals, lags = 7)        
         })
         names(r) <- scores
         return(r)
@@ -520,7 +520,7 @@ names(ARCH) <- TOPICS
 ```{r normality_test}
 NORM <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                JarqueBeraTest(ARp2_1_0[[i]][[j]]$residuals, robust = T)        
+                JarqueBeraTest(ARIMA_BASIC[[i]][[j]]$residuals, robust = T)        
         })
         names(r) <- scores
         return(r)
@@ -532,7 +532,7 @@ names(NORM) <- TOPICS
 DIAGTEST <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(1:7, function(j){
                 test <- sum(
-                        #NORM[[i]][[j]]$p.value > 0.05,
+                        # NORM[[i]][[j]]$p.value > 0.05,
                         ARCH[[i]][[j]]$p.value > 0.05,
                         SERIALCORR[[i]][[j]]$p.value > 0.05
                 )
@@ -549,7 +549,7 @@ names(DIAGTEST) <- TOPICS
 ```{r residual_acf}
 RESID_ACF <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                Acf(ARp2_1_0[[i]][[j]]$residuals, plot = F)        
+                Acf(ARIMA_BASIC[[i]][[j]]$residuals, plot = F)        
         })
         return(r)
 })
@@ -582,31 +582,87 @@ ar3 = -0.5
 C <- compan(c(1, -ar1, -ar2, -ar3))
 ```
 
+```{r ARp2MAinf}
+# calculate IRF using the method described here:
+# https://stats.stackexchange.com/questions/171698/how-to-calculate-impulse-responses-for-a-given-autoregressive-process
+
+irf <- function(phi, theta = 0, h = 20){
+        
+        # check invertability of lag polynomial roots
+        if((all(abs(polyroot(c(1, -phi)))) > 1)) {
+                print ("roots OK")
+        } else {
+                print ("roots NOT OK")
+        }
+        
+        # if invertible, change AR(p) to MA(inf)
+        if(all(abs(phi) < 1)){ # & (all(abs(theta) < 1)))
+                print(paste(phi, "not invertible", sep = " "))}
+        
+        # padding to horizon
+        phi <- c(phi, rep(0,h-length(phi)))
+        theta <- c(theta, rep(0,h-length(theta)))
+        
+        result <- NULL
+        
+        imp0 <- 1
+        # imp1 <- phi[1] + theta[1]
+        imp2 <- sapply(1:h, function(j){
+                # phi[j-1]^j * (phi[j] + theta[j])})
+                phi[j]^(j-1) * (phi[j] + theta[j])})
+        result <- c(imp0, imp2)
+        
+        return(result)
+}
+
+GDP <- irf(phi = c(0.22, 0.15))
+inflation <- irf(phi = c(0.46, 0.31, 0.16, 0.01))
+unemployment <- irf(phi = c(1.58, -0.64))
+interest <- irf(phi = c(1.18, -0.23))
+
+plot(GDP, type = "b", col = "red", ylim = range(0:3), ylab = "Response", xlab = "Horizon")
+lines(unemployment, type = "b", col = "black")
+lines(interest, type = "b", col = "blue")
+lines(inflation, type = "b", col = "green")
+
+```
+
 ```{r ARsmall2irf}
 # calculate IRF using the method described here:
 # http://www.econ.ohio-state.edu/dejong/note2.pdf
 irf <- function(ar, h = 20){
-        y <- polyroot(c(1, -ar[1], -ar[2]))
-        lambda <- 1/Re(y)
-        
-        result <- sapply(0:h, function(k){
-                imp <- sapply(0:k, function(j){
-                        lambda[1]^j*lambda[2]^(k-j)
-                })
-                sum(imp)
-        })
+        result <- NULL
+        # if invertible, change AR(p) to MA(inf)
+        if(all(abs(ar) < 1)){
+                y <- polyroot(c(1, -ar[1], -ar[2]))
+                if (all(abs(y) < 1)){
+                        lambda <- 1/Re(y)
+                        
+                        result <- sapply(0:h, function(k){
+                                imp <- sapply(0:k, function(j){
+                                        lambda[1]^j*lambda[2]^(k-j)
+                                })
+                                sum(imp)
+                        })       
+                }
+        }
         return(result)
-        
 }
-IRF_ARp2_1_0 <- lapply(seq_along(TOPICS), function(i){
+```
+
+```{r calculate_irf}
+IRF_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
         
         byScore <- lapply(seq_along(scores), function(j){
-                res <- tryCatch({
-                        irf(ARp2_1_0[[i]][[j]]$coef, h = 7)},
+                tryCatch({
+                        irf(ARIMA_BASIC[[i]][[j]]$coef, h = 20)},
                         error=function(e) e)
-                p <- if (is.numeric(res)){
-                        plot(res, type = "b", ylim = range(0:2), ylab = "Response", xlab = "Horizon", main = paste(TOPICS[i], scores[j], sep = " - "))}
-                return(p)
         })
 })
+```
+
+```{r plot_irf}
+p <- if (is.numeric(res)){
+                        plot(res, type = "b", ylim = range(0:2), ylab = "Response", xlab = "Horizon", main = paste(TOPICS[i], scores[j], sep = " - "))}
+                return(p)
 ```
