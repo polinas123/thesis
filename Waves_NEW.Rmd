@@ -183,7 +183,7 @@ byTopic <- lapply(seq_along(TOPICS), function(i){
 
 
 ```{r descriptive}
-scores <- colnames(byTopic[[i]])[8:14]
+scores <- colnames(byTopic[[1]])[8:14]
 SUMMARY <- lapply(seq_along(TOPICS), function(i){
         byTopic[[i]][, sapply(.SD, summary), .SDcols = scores]
 })
@@ -202,6 +202,18 @@ byTopic_m <- lapply(seq_along(TOPICS), function(i){
         byTopic_m[[i]][(byTopic_m[[i]][, cumsum(value), by = variable] != 0)[,2]]
 })
 ```
+
+```{r dim}
+byTopic_m <- lapply(seq_along(TOPICS), function(i){
+        dt <- lapply(scores, function(j){
+                unique(unique(byTopic_m[[i]][variable == j, .(variable, value), by = .(publish_date)])[, value := sum(value), by = .(publish_date)])
+        })
+return(rbindlist(dt))
+})
+
+
+```
+
 
 ```{r hist_plot}
 HIST <- lapply(seq_along(TOPICS), function(i){
@@ -228,8 +240,13 @@ TSvsDIFF <- lapply(seq_along(TOPICS), function(i){
 ```
 
 ```{r diff_descriptive}
+
+
 DIFF_SUMMARY <- lapply(seq_along(TOPICS), function(i){
-        summary(byTopic[[i]][, sapply(.SD, diff), .SDcols = scores])
+        dt <- lapply(scores, function(j){
+                d <- unique(byTopic[[i]][, c("publish_date", j), with = F])[, sapply(.SD, sum), .SDcols = j, by = .(publish_date)]
+                summary(diff(d$V1))
+        })
 })
 ```
 
@@ -267,6 +284,20 @@ PACF <- lapply(seq_along(TOPICS), function(i){
 })
 PACF <- setNames(PACF, TOPICS)
 ```
+
+```{r autocov_plot}
+ACOVF <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
+                Acf(x = byTopic_m[[i]][variable == j, value], 
+                    plot = F,
+                    type = "covariance")
+                
+        })
+        setNames(byScore, scores)
+})
+ACOVF <- setNames(ACOVF, TOPICS)
+```
+
 
 ```{r diff_acf_plot}
 DIFF_ACF <- lapply(seq_along(TOPICS), function(i){
@@ -346,14 +377,24 @@ interesting <- c(8, 18, 32, 37)
 cbind(dummy, as.numeric(t[,1]))[V2 > 0, .N, by = weekday]
 ```
 
+## ARIMA models
+# AR(p) Model: 
+$x_t$ = $\phi$$x_{t-1}$ + $\epsilon_t$
+```{r arima_basic}
+ARp2_1_0 <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
+                t <- ts(byTopic_m[[i]][variable == j, value])
+                model <- auto.arima(y = t, d = 1, max.q = 0, max.p = 2)
+        })
+})
+```
+
+# regression with ARIMA errors:
 ```{r arima_basic}
 ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
-                        
-               dt <- unique(byTopic_m[[i]][variable == j, value, by = .(publish_date)])[, sum(value), by = "publish_date"]
-               colnames(dt)[2] <- "value"
                
-                t <- ts(unique(dt[, .(publish_date, value)])[,2])
+                t <- ts(byTopic_m[[i]][variable == j, value])
 
                 benchmark <- auto.arima(y = t, d = 1, xreg = dummy[, c("electionDay", "DemEvents", "RepEvents")])
                 weekday <- auto.arima(y = t, xreg = dummy[, disp, with = F], d = 1)
@@ -442,37 +483,73 @@ setNames(byScore, scores)
 TSO_S_ARIMA <- setNames(TSO_S_ARIMA, TOPICS)
 ```
 
-```{r serial_test}
-SERIALCORR <- lapply(seq_along(TOPICS), function(i){
+# Diagnostics
+
+```{r tsdiag}
+DIAGPLOT <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                bgtest(ARIMA[[i]][[j]]$residuals ~ 1)        
+                tsdiag(ARp2_1_0[[i]][[j]])        
         })
         return(r)
 })
+```
+
+
+```{r serial_test}
+SERIALCORR <- lapply(seq_along(TOPICS), function(i){
+        r <- lapply(1:7, function(j){
+                bgtest(ARp2_1_0[[i]][[j]]$residuals ~ 1, order = 7)        
+        })
+        names(r) <- scores
+        return(r)
+})
+names(SERIALCORR) <- TOPICS
 ```
 
 ```{r arch_test}
 ARCH <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                ArchTest(ARIMA[[i]][[j]]$residuals)        
+                ArchTest(ARp2_1_0[[i]][[j]]$residuals, lags = 7)        
         })
+        names(r) <- scores
         return(r)
 })
+names(ARCH) <- TOPICS
 ```
 
 ```{r normality_test}
 NORM <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                JarqueBera.test(ARIMA[[i]][[j]]$residuals)        
+                JarqueBeraTest(ARp2_1_0[[i]][[j]]$residuals, robust = T)        
         })
+        names(r) <- scores
         return(r)
 })
+names(NORM) <- TOPICS
+```
+
+```{r hypothesis_testing}
+DIAGTEST <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(1:7, function(j){
+                test <- sum(
+                        #NORM[[i]][[j]]$p.value > 0.05,
+                        ARCH[[i]][[j]]$p.value > 0.05,
+                        SERIALCORR[[i]][[j]]$p.value > 0.05
+                )
+                if (test == 2) {
+                        print(paste(i, TOPICS[i], j, scores[j], sep = " - "))}
+                return(test)
+        })
+        names(byScore) <- scores
+})
+names(DIAGTEST) <- TOPICS
+
 ```
 
 ```{r residual_acf}
 RESID_ACF <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                Acf(ARIMA[[i]][[j]]$residuals, plot = F)        
+                Acf(ARp2_1_0[[i]][[j]]$residuals, plot = F)        
         })
         return(r)
 })
@@ -481,7 +558,7 @@ RESID_ACF <- lapply(seq_along(TOPICS), function(i){
 ```{r residual_pacf}
 RESID_PACF <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                Acf(ARIMA[[i]][[j]]$residuals, plot = F, type = "partial")        
+                Acf(ARp2_1_0[[i]][[j]]$residuals, plot = F, type = "partial")        
         })
         return(r)
 })
@@ -491,4 +568,45 @@ RESID_PACF <- lapply(seq_along(TOPICS), function(i){
 # irf for MA model
 irf <- sapply(0:6, function(i){ (sum(test$coef^i))*sd(test$residuals)})
 plot(irf, type = "l")
+```
+
+```{r ARp2IRF}
+# for p > 2, first  transform AR(p) to AR(1)
+# source: https://www3.nd.edu/~esims1/arp_companion.pdf
+require(pracma)
+
+ar1 = 0.8
+ar2 = 0.6
+ar3 = -0.5
+
+C <- compan(c(1, -ar1, -ar2, -ar3))
+```
+
+```{r ARsmall2irf}
+# calculate IRF using the method described here:
+# http://www.econ.ohio-state.edu/dejong/note2.pdf
+irf <- function(ar, h = 20){
+        y <- polyroot(c(1, -ar[1], -ar[2]))
+        lambda <- 1/Re(y)
+        
+        result <- sapply(0:h, function(k){
+                imp <- sapply(0:k, function(j){
+                        lambda[1]^j*lambda[2]^(k-j)
+                })
+                sum(imp)
+        })
+        return(result)
+        
+}
+IRF_ARp2_1_0 <- lapply(seq_along(TOPICS), function(i){
+        
+        byScore <- lapply(seq_along(scores), function(j){
+                res <- tryCatch({
+                        irf(ARp2_1_0[[i]][[j]]$coef, h = 7)},
+                        error=function(e) e)
+                p <- if (is.numeric(res)){
+                        plot(res, type = "b", ylim = range(0:2), ylab = "Response", xlab = "Horizon", main = paste(TOPICS[i], scores[j], sep = " - "))}
+                return(p)
+        })
+})
 ```
