@@ -387,6 +387,21 @@ ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
                 model <- auto.arima(t)
         })
 })
+
+S_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
+                t <- ts(byTopic_m[[i]][variable == j, value], freq = 7)
+                model <- auto.arima(t, d = 1)
+        })
+})
+
+SADJ_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
+        byScore <- lapply(scores, function(j){
+                t <- ts(byTopic_m[[i]][variable == j, value], freq = 7)
+                t <- seasadj(stl(t, s.window = "periodic"))
+                model <- auto.arima(t, d = 1)
+        })
+})
 ```
 
 # regression with ARIMA errors:
@@ -488,7 +503,7 @@ TSO_S_ARIMA <- setNames(TSO_S_ARIMA, TOPICS)
 ```{r tsdiag}
 DIAGPLOT <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                tsdiag(ARIMA_BASIC[[i]][[j]])        
+                tsdiag(S_ARIMA_BASIC[[i]][[j]])        
         })
         return(r)
 })
@@ -498,7 +513,7 @@ DIAGPLOT <- lapply(seq_along(TOPICS), function(i){
 ```{r serial_test}
 SERIALCORR <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                bgtest(ARIMA_BASIC[[i]][[j]]$residuals ~ 1, order = 7)        
+                bgtest(SADJ_ARIMA_BASIC[[i]][[j]]$residuals ~ 1, order = 7)        
         })
         names(r) <- scores
         return(r)
@@ -509,7 +524,7 @@ names(SERIALCORR) <- TOPICS
 ```{r arch_test}
 ARCH <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                ArchTest(ARIMA_BASIC[[i]][[j]]$residuals, lags = 7)        
+                ArchTest(SADJ_ARIMA_BASIC[[i]][[j]]$residuals, lags = 7)        
         })
         names(r) <- scores
         return(r)
@@ -520,7 +535,7 @@ names(ARCH) <- TOPICS
 ```{r normality_test}
 NORM <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                JarqueBeraTest(ARIMA_BASIC[[i]][[j]]$residuals, robust = T)        
+                JarqueBeraTest(SADJ_ARIMA_BASIC[[i]][[j]]$residuals, robust = T)        
         })
         names(r) <- scores
         return(r)
@@ -546,10 +561,20 @@ names(DIAGTEST) <- TOPICS
 
 ```
 
+```{r coeftest}
+COEF_SIG <- lapply(seq_along(TOPICS), function(i){
+        
+        byScore <- lapply(seq_along(scores), function(j){
+                
+                coeftest(SADJ_ARIMA_BASIC[[i]][[j]])
+        })
+})
+```
+
 ```{r residual_acf}
 RESID_ACF <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                Acf(ARIMA_BASIC[[i]][[j]]$residuals, plot = F)        
+                Acf(SADJ_ARIMA_BASIC[[i]][[j]]$residuals, plot = F)        
         })
         return(r)
 })
@@ -558,7 +583,7 @@ RESID_ACF <- lapply(seq_along(TOPICS), function(i){
 ```{r residual_pacf}
 RESID_PACF <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                Acf(ARp2_1_0[[i]][[j]]$residuals, plot = F, type = "partial")        
+                Acf(SADJ_ARIMA_BASIC[[i]][[j]]$residuals, plot = F, type = "partial")        
         })
         return(r)
 })
@@ -589,15 +614,21 @@ C <- compan(c(1, -ar1, -ar2, -ar3))
 irf <- function(phi, theta = 0, h = 20){
         
         # check invertability of lag polynomial roots
-        if((all(abs(polyroot(c(1, -phi)))) > 1)) {
-                print ("roots OK")
-        } else {
-                print ("roots NOT OK")
-        }
+        # if((!all(abs(polyroot(c(1, -phi)))) < 1)) {
+        #         print ("roots NOT OK")
+        # }
         
         # if invertible, change AR(p) to MA(inf)
-        if(all(abs(phi) < 1)){ # & (all(abs(theta) < 1)))
-                print(paste(phi, "not invertible", sep = " "))}
+        if(phi){
+                # if(!all(abs(phi) < 1)){ # & (all(abs(theta) < 1)))
+                # if((!all(abs(polyroot(c(1, -phi)))) > 1))
+                print("phi not invertible")}        
+        } else {
+                # if(!all(abs(theta) < 1)){ # & (all(abs(theta) < 1)))
+                # if((!all(abs(polyroot(c(1, -theta)))) < 1))
+                print("theta not invertible")}        
+        
+        
         
         # padding to horizon
         phi <- c(phi, rep(0,h-length(phi)))
@@ -606,11 +637,17 @@ irf <- function(phi, theta = 0, h = 20){
         result <- NULL
         
         imp0 <- 1
-        # imp1 <- phi[1] + theta[1]
-        imp2 <- sapply(1:h, function(j){
-                # phi[j-1]^j * (phi[j] + theta[j])})
-                phi[j]^(j-1) * (phi[j] + theta[j])})
-        result <- c(imp0, imp2)
+        imp1 <- phi[1] + theta[1]
+        imp2 <- sapply(2:h, function(j){
+                if (!phi[j-1]){
+                        phi[j] + theta[j]
+                } else {
+                        phi[j-1]^j * (phi[j] + theta[j])
+                        # phi[j]^(j-1) * (phi[j] + theta[j])
+                }
+                
+        })
+        result <- c(imp0, imp1, imp2)
         
         return(result)
 }
@@ -654,15 +691,61 @@ irf <- function(ar, h = 20){
 IRF_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
         
         byScore <- lapply(seq_along(scores), function(j){
+                print(paste(i,j, swp = ":"))
                 tryCatch({
-                        irf(ARIMA_BASIC[[i]][[j]]$coef, h = 20)},
+                        imp <- irf(phi = ARIMA_BASIC[[i]][[j]]$model$phi, theta = ARIMA_BASIC[[i]][[j]]$model$theta, h = 330)},
                         error=function(e) e)
+                #imp <- imp * sd(ARIMA_BASIC[[i]][[j]]$residuals)
+                return(imp)
+        })
+})
+
+S_IRF_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
+        
+        byScore <- lapply(seq_along(scores), function(j){
+                print(paste("S", i,j, swp = ":"))
+                tryCatch({
+                        imp <- irf(phi = S_ARIMA_BASIC[[i]][[j]]$model$phi, theta = S_ARIMA_BASIC[[i]][[j]]$model$theta, h = 330)},
+                        error=function(e) e)
+                # scaling to residual SD
+                imp <- imp #* S_ARIMA_BASIC[[i]][[j]]$residuals
+                return(imp)
+        })
+})
+```
+
+```{r check_invertability}
+INVERTABLE <- lapply(seq_along(TOPICS), function(i){
+        
+        byScore <- lapply(seq_along(scores), function(j){
+                
+                phi <- SADJ_ARIMA_BASIC[[i]][[j]]$model$phi
+                theta <- SADJ_ARIMA_BASIC[[i]][[j]]$model$theta
+                
+                if(!is.null(phi)){
+                        # if(!all(abs(phi) < 1)){ # & (all(abs(theta) < 1)))
+                        if(!all(abs(polyroot(c(1, -phi))) > 1)){
+                                print("phi not invertible")
+                        }
+                }
+                else {
+                        # if(!all(abs(theta) < 1)){ # & (all(abs(theta) < 1)))
+                        if((!all(abs(polyroot(c(1, -theta)))) > 1)){
+                                print("theta not invertible")        
+                        }
+                }
         })
 })
 ```
 
 ```{r plot_irf}
-p <- if (is.numeric(res)){
-                        plot(res, type = "b", ylim = range(0:2), ylab = "Response", xlab = "Horizon", main = paste(TOPICS[i], scores[j], sep = " - "))}
-                return(p)
+# plot non - seasonal IRF
+lapply(seq_along(TOPICS), function(i) {plot(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[1]]$model$phi, ma = ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = 30)), type = "b", main = TOPICS[[i]], ylab = "", xlab = "")})
+```
+
+```{r plot_s_irf}
+# plot seasonal IRF
+lapply(seq_along(TOPICS), function(i) {plot(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[1]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = 30)), type = "l", lwd = 2, main = TOPICS[[i]], ylab = "", xlab = "")
+        lapply(2:7, function(j){ lines(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[j]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = 30)), col = j) })
+        })
 ```

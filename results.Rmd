@@ -1,0 +1,275 @@
+---
+title: "Media Attention to Political Topics"
+output: html_document
+---
+
+Modeling patterns of daily changes in salience of political topics in US news websites during 2016 (Feb - Nov).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(results='hide', echo=FALSE)
+
+require(data.table)
+require(ggplot2)
+require(cowplot)
+require(e1071)
+
+load(file = "model")
+load(file = "topics")
+```
+
+```{r plot_s_irf}
+
+plotIRF <- function(topicID, comparisons = "", h = 6){
+        lapply(topicID, function(i) {
+                if (comparisons == ""){
+                        ir <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[1]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        plot(y = ir, x = c(0:h), type = "l", lwd = 2, main = TOPICS[[i]], ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), sub = skewness(ir)+kurtosis(ir))
+                } else if(comparisons == "states"){ 
+                        black <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[1]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        blue <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[5]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[5]]$model$theta, lag.max = h)))
+                        red <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[6]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[6]]$model$theta, lag.max = h)))
+                        purple <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[7]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[7]]$model$theta, lag.max = h)))
+                        
+
+                        plot( y = black,x = c(0:h), type = "l", lwd = 2,  ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), main = TOPICS[[i]]) 
+                        plot( y = blue,x = c(0:h), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), col = "blue") 
+                        plot( y = red, x = c(0:h), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), col = "red")
+                        plot( y = purple, x = c(0:h), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), col = "purple")
+                                                                                     
+                } else if (comparisons == "sites"){
+                        black <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[1]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        orange <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[3]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[3]]$model$theta, lag.max = h)))
+                        green <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[4]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[4]]$model$theta, lag.max = h)))
+                        
+                        sites <- as.data.table(cbind(black, orange, green, days = c(0:h)))
+                        sites <- melt(sites, id.vars = "days")
+                        setnames(sites, c("Days", "Color","Shock"))
+                        sites[, variable := as.factor(Color)]
+                        
+                        qplot(data = sites, y = Shock, x = Days, group = Color, colour = Color, main = TOPICS[[i]]) + geom_line() + scale_color_manual(values = levels(sites$Color)) + theme(legend.position='none') + scale_x_discrete(breaks = c(1:h), limits = as.character(c(1:h)), labels = as.character(c(1:h)))       
+                }                
+        })
+}
+
+
+```
+
+
+
+```{r topics, results='hide'}
+TOPICS
+```
+
+## All Media Sources
+
+### Policy Issues
+```{r issues_all}
+par(mfrow = c(1,2))
+
+plotIRF(13)
+plotIRF(14)
+
+plotIRF(7)
+plotIRF(2)
+
+plotIRF(23)
+plotIRF(31)
+
+plotIRF(24)
+plotIRF(19)
+
+plotIRF(11)
+plotIRF(8)
+
+plotIRF(32)
+plotIRF(18)
+
+plotIRF(36)
+
+```
+
+### Presidential Candidates
+
+```{r candidates_all}
+par(mfrow = c(1,2))
+
+plotIRF(37)
+plotIRF(28)
+
+plotIRF(27)
+plotIRF(29)
+plotIRF(30)
+```
+
+
+
+## Compare sites by origin - Nationwide Sources vs. Local Sources
+
+orange = nationwide sources
+green - local sources
+
+### Policy Issues: 
+
+```{r issues_sites}
+
+a <- plotIRF(13, comparisons = "sites")
+b <- plotIRF(14, comparisons = "sites")
+
+plot_grid(a[[1]],b[[1]])
+
+a <- plotIRF(32, comparisons = "sites")
+b <- plotIRF(8, comparisons = "sites")
+
+plot_grid(a[[1]],b[[1]])
+
+a <- plotIRF(7, comparisons = "sites")
+b <- plotIRF(2, comparisons = "sites")
+
+plot_grid(a[[1]],b[[1]])
+
+plotIRF(36, comparisons = "sites")
+
+```
+
+
+### Presidential Candidates
+
+```{r candidates_sites}
+
+a <- plotIRF(37, comparisons = "sites")
+
+plot_grid(a[[1]],b[[1]])
+
+a <- plotIRF(27, comparisons = "sites")
+b <- plotIRF(29, comparisons = "sites")
+
+plot_grid(a[[1]],b[[1]])
+
+plotIRF(30, comparisons = "sites")
+
+```
+
+
+## Compare States by Color - Local Sources only
+
+for each topic:
+
+black (top left) = benchmark (all sources)
+
+blue (top right) = sources from blue states
+
+red (bottom left) = sources from red states
+
+purple (bottom rigth) = sources from purple states
+
+```{r issues_states}
+par(mfrow = c(2,2))
+
+plotIRF(13, comparisons = "states")
+plotIRF(14, comparisons = "states")
+plotIRF(7, comparisons = "states")
+plotIRF(2, comparisons = "states")
+plotIRF(24, comparisons = "states")
+plotIRF(32, comparisons = "states")
+
+```
+
+
+
+### Presidential Candidates
+```{r candidates_states}
+
+par(mfrow = c(2,2))
+
+plotIRF(37, comparisons = "states")
+plotIRF(28, comparisons = "states")
+plotIRF(27, comparisons = "states")
+plotIRF(29, comparisons = "states")
+plotIRF(30, comparisons = "states")
+
+```
+
+```{r skeweness}
+h = 6
+
+SKEWENESS <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[3]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[3]]$model$theta, lag.max = h)))
+        return(skewness(x))
+})
+```
+
+```{r numPeaks}
+h = 6
+
+PEAKS <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[j]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        return(length(x[which(diff(sign(diff(x)))==-2)+1])+1)
+})
+```
+
+```{r numDays}
+h = 6
+
+DAYS <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[j]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        return(which(abs(diff(x)) < 0.005)[1])
+})
+```
+
+```{r typology}
+typology.all <- data.table(cbind(TOPICS, PEAKS, DAYS))
+typology.nationwide <- data.table(cbind(TOPICS, PEAKS, DAYS))
+typology.local <- data.table(cbind(TOPICS, PEAKS, DAYS))
+issues_all <- c(13, 14,7,2,23,31,24,19,11,8,32,18,36)
+candidates_all <- c(37,28,27,29,30)
+issues_nvl = c(13,14,7,2,8,32,36)
+candidates_nvl = c(37,27,29,30)
+
+# cbind(plot = seq_along(TOPICS[issues_nvl]), topic = TOPICS[issues_nvl])
+
+x <- as.numeric(typology.all[issues_nvl, DAYS][4:6])
+y <- as.numeric(typology.all[issues_nvl, PEAKS][4:6])
+
+x1 <- as.numeric(typology.nationwide[issues_nvl, DAYS][4:6])
+y1 <- as.numeric(typology.nationwide[issues_nvl, PEAKS][4:6])
+
+x2 <- as.numeric(typology.local[issues_nvl, DAYS][4:6])
+y2 <- as.numeric(typology.local[issues_nvl, PEAKS][4:6])
+
+# labels <- as.character(typology[issues_all, TOPICS])
+labels <- TOPICS[issues_nvl][4:6]
+
+plot(x = x, y = y, ylim = c(0, 5), xlim = c(0, 5), xlab = "DAYS", ylab = "PEAKS", main = "Policy Issues: All Sources")
+text(x = x, y = y, labels = labels, pos = rep(c(1,2,3,4),2), cex = 0.7, offset = 0.5)
+points(x = x1, y = y1, col = "gray")
+text(x = x1, y = y1, labels = labels, pos = rep(c(1,2,3,4),2), cex = 0.7, offset = 0.5, col = "gray")
+points(x = x2, y = y2, col = "green")
+text(x = x2, y = y2, labels = labels, pos = rep(c(1,2,3,4),2), cex = 0.7, offset = 0.5, col = "green")
+legend(legend = c("all", "nationwide", "local") , x = "bottomright", fill = c("black", "gray", "green"))
+
+# cbind(plot = seq_along(TOPICS[candidates_all]), topic = TOPICS[candidates_all])
+
+x <- as.numeric(typology.all[issues_nvl, DAYS][c(1,2,4:6)])
+y <- as.numeric(typology.all[issues_nvl, PEAKS][c(1,2,4:6)])
+labels <- TOPICS[issues_nvl][c(1,2,4:6)]
+plot(x = x, y = y, ylim = c(0, 5), xlim = c(0, 7), xlab = "DAYS", ylab = "PEAKS", main = "Policy Issues: All Sources")
+text(x = x, y = y, labels = labels, pos = c(1,3,3,4), cex = 0.7, offset = 0.5)
+
+
+x1 <- as.numeric(typology.nationwide[candidates_nvl, DAYS])
+y1 <- as.numeric(typology.nationwide[candidates_nvl, PEAKS])
+
+x2 <- as.numeric(typology.local[candidates_nvl, DAYS])
+y2 <- as.numeric(typology.local[candidates_nvl, PEAKS])
+
+labels <- TOPICS[candidates_nvl]
+
+
+plot(x = NULL, y = NULL, ylim = c(0, 5), xlim = c(0, 7), xlab = "DAYS", ylab = "PEAKS", main = "Candidates: Natiobwide vs Local")
+#points(x = x1, y = y1, col = "blue", pch = 1)
+text(x = x1, y = y1, labels = labels, pos = c(1,2,3,4), cex = 0.7, offset = 0.5, col = "blue")
+#points(x = x2, y = y2, col = "green", pch = 2)
+text(x = x2, y = y2, labels = labels, pos = c(1,4,4,3), cex = 0.7, offset = 0.5, col = "green")
+legend(legend = c("nationwide", "local") , x = "topright", fill = c("blue", "green"))
+
+```
