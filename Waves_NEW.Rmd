@@ -509,11 +509,20 @@ DIAGPLOT <- lapply(seq_along(TOPICS), function(i){
 })
 ```
 
+```{r fit}
+ACTUALvsFITTED <- lapply(seq_along(TOPICS), function(i){
+        r <- lapply(1:7, function(j){
+                plot(S_ARIMA_BASIC[[i]][[j]]$x, type = "l")
+                lines(S_ARIMA_BASIC[[i]][[j]]$fitted, col = "red")
+        })
+        return(r)
+})
+```
 
 ```{r serial_test}
 SERIALCORR <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                bgtest(SADJ_ARIMA_BASIC[[i]][[j]]$residuals ~ 1, order = 7)        
+                bgtest(S_ARIMA_BASIC[[i]][[j]]$residuals ~ 1, order = 7)        
         })
         names(r) <- scores
         return(r)
@@ -524,7 +533,7 @@ names(SERIALCORR) <- TOPICS
 ```{r arch_test}
 ARCH <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                ArchTest(SADJ_ARIMA_BASIC[[i]][[j]]$residuals, lags = 7)        
+                ArchTest(S_ARIMA_BASIC[[i]][[j]]$residuals, lags = 7)        
         })
         names(r) <- scores
         return(r)
@@ -535,7 +544,7 @@ names(ARCH) <- TOPICS
 ```{r normality_test}
 NORM <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                JarqueBeraTest(SADJ_ARIMA_BASIC[[i]][[j]]$residuals, robust = T)        
+                JarqueBeraTest(S_ARIMA_BASIC[[i]][[j]]$residuals, robust = T)        
         })
         names(r) <- scores
         return(r)
@@ -566,7 +575,7 @@ COEF_SIG <- lapply(seq_along(TOPICS), function(i){
         
         byScore <- lapply(seq_along(scores), function(j){
                 
-                coeftest(SADJ_ARIMA_BASIC[[i]][[j]])
+                coeftest(S_ARIMA_BASIC[[i]][[j]])
         })
 })
 ```
@@ -574,7 +583,7 @@ COEF_SIG <- lapply(seq_along(TOPICS), function(i){
 ```{r residual_acf}
 RESID_ACF <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                Acf(SADJ_ARIMA_BASIC[[i]][[j]]$residuals, plot = F)        
+                Acf(S_ARIMA_BASIC[[i]][[j]]$residuals, plot = F)        
         })
         return(r)
 })
@@ -583,7 +592,7 @@ RESID_ACF <- lapply(seq_along(TOPICS), function(i){
 ```{r residual_pacf}
 RESID_PACF <- lapply(seq_along(TOPICS), function(i){
         r <- lapply(1:7, function(j){
-                Acf(SADJ_ARIMA_BASIC[[i]][[j]]$residuals, plot = F, type = "partial")        
+                Acf(S_ARIMA_BASIC[[i]][[j]]$residuals, plot = F, type = "partial")        
         })
         return(r)
 })
@@ -719,8 +728,8 @@ INVERTABLE <- lapply(seq_along(TOPICS), function(i){
         
         byScore <- lapply(seq_along(scores), function(j){
                 
-                phi <- SADJ_ARIMA_BASIC[[i]][[j]]$model$phi
-                theta <- SADJ_ARIMA_BASIC[[i]][[j]]$model$theta
+                phi <- S_ARIMA_BASIC[[i]][[j]]$model$phi
+                theta <- S_ARIMA_BASIC[[i]][[j]]$model$theta
                 
                 if(!is.null(phi)){
                         # if(!all(abs(phi) < 1)){ # & (all(abs(theta) < 1)))
@@ -740,7 +749,7 @@ INVERTABLE <- lapply(seq_along(TOPICS), function(i){
 
 ```{r plot_irf}
 # plot non - seasonal IRF
-lapply(seq_along(TOPICS), function(i) {plot(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[1]]$model$phi, ma = ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = 30)), type = "b", main = TOPICS[[i]], ylab = "", xlab = "")})
+lapply(seq_along(TOPICS), function(i) {plot(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[1]]$model$phi, ma = ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = 30)), type = "b", main = TOPICS[[i]], ylab = "", xlab = "")})
 ```
 
 ```{r plot_s_irf}

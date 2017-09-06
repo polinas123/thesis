@@ -12,6 +12,8 @@ require(data.table)
 require(ggplot2)
 require(cowplot)
 require(e1071)
+require(EnvStats)
+require(DescTools)
 
 load(file = "model")
 load(file = "topics")
@@ -22,31 +24,31 @@ load(file = "topics")
 plotIRF <- function(topicID, comparisons = "", h = 6){
         lapply(topicID, function(i) {
                 if (comparisons == ""){
-                        ir <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[1]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
-                        plot(y = ir, x = c(0:h), type = "l", lwd = 2, main = TOPICS[[i]], ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), sub = skewness(ir)+kurtosis(ir))
+                        ir <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[1]]$model$phi, ma = S_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        plot(y = ir, x = c(1:(h+1)), type = "l", lwd = 2, main = TOPICS[[i]], ylab = "Shock", xlab = "Days", xlim = range(1,(h+1)), ylim = range(0,1)) #), sub = skewness(ir)+kurtosis(ir))
                 } else if(comparisons == "states"){ 
-                        black <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[1]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
-                        blue <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[5]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[5]]$model$theta, lag.max = h)))
-                        red <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[6]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[6]]$model$theta, lag.max = h)))
-                        purple <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[7]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[7]]$model$theta, lag.max = h)))
+                        black <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[1]]$model$phi, ma = S_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        blue <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[5]]$model$phi, ma = S_ARIMA_BASIC[[i]][[5]]$model$theta, lag.max = h)))
+                        red <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[6]]$model$phi, ma = S_ARIMA_BASIC[[i]][[6]]$model$theta, lag.max = h)))
+                        purple <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[7]]$model$phi, ma = S_ARIMA_BASIC[[i]][[7]]$model$theta, lag.max = h)))
                         
 
-                        plot( y = black,x = c(0:h), type = "l", lwd = 2,  ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), main = TOPICS[[i]]) 
-                        plot( y = blue,x = c(0:h), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), col = "blue") 
-                        plot( y = red, x = c(0:h), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), col = "red")
-                        plot( y = purple, x = c(0:h), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(0,h), ylim = range(0,1), col = "purple")
+                        plot( y = black,x = c(1:(h+1)), type = "l", lwd = 2,  ylab = "Shock", xlab = "Days", xlim = range(1,(h+1)), ylim = range(0,1), main = TOPICS[[i]]) 
+                        plot( y = blue,x = c(1:(h+1)), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(1,(h+1)), ylim = range(0,1), col = "blue") 
+                        plot( y = red, x = c(1:(h+1)), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(1,(h+1)), ylim = range(0,1), col = "red")
+                        plot( y = purple, x = c(1:(h+1)), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(1,(h+1)), ylim = range(0,1), col = "purple")
                                                                                      
                 } else if (comparisons == "sites"){
-                        black <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[1]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
-                        orange <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[3]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[3]]$model$theta, lag.max = h)))
-                        green <- cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[4]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[4]]$model$theta, lag.max = h)))
+                        black <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[1]]$model$phi, ma = S_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        orange <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[3]]$model$phi, ma = S_ARIMA_BASIC[[i]][[3]]$model$theta, lag.max = h)))
+                        green <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[4]]$model$phi, ma = S_ARIMA_BASIC[[i]][[4]]$model$theta, lag.max = h)))
                         
                         sites <- as.data.table(cbind(black, orange, green, days = c(0:h)))
                         sites <- melt(sites, id.vars = "days")
                         setnames(sites, c("Days", "Color","Shock"))
                         sites[, variable := as.factor(Color)]
                         
-                        qplot(data = sites, y = Shock, x = Days, group = Color, colour = Color, main = TOPICS[[i]]) + geom_line() + scale_color_manual(values = levels(sites$Color)) + theme(legend.position='none') + scale_x_discrete(breaks = c(1:h), limits = as.character(c(1:h)), labels = as.character(c(1:h)))       
+                        qplot(data = sites, y = Shock, x = Days, group = Color, colour = Color, main = TOPICS[[i]]) + geom_line() + scale_color_manual(values = levels(sites$Color)) + theme(legend.position='none') + scale_x_discrete(breaks = c(1:(h+1)), limits = as.character(c(1:(h+1))), labels = as.character(c(1:(h+1))))       
                 }                
         })
 }
@@ -66,11 +68,8 @@ TOPICS
 ```{r issues_all}
 par(mfrow = c(1,2))
 
-plotIRF(13)
-plotIRF(14)
-
-plotIRF(7)
 plotIRF(2)
+plotIRF(14)
 
 plotIRF(23)
 plotIRF(31)
@@ -78,13 +77,14 @@ plotIRF(31)
 plotIRF(24)
 plotIRF(19)
 
-plotIRF(11)
+plotIRF(12)
 plotIRF(8)
 
 plotIRF(32)
 plotIRF(18)
 
-plotIRF(36)
+plotIRF(25)
+plotIRF(7)
 
 ```
 
@@ -110,35 +110,26 @@ green - local sources
 
 ### Policy Issues: 
 
-```{r issues_sites}
+```{r issues_sites, include=FALSE}
 
-a <- plotIRF(13, comparisons = "sites")
-b <- plotIRF(14, comparisons = "sites")
+a <- plotIRF(7, comparisons = "sites")
+b <- plotIRF(25, comparisons = "sites")
 
 plot_grid(a[[1]],b[[1]])
 
-a <- plotIRF(32, comparisons = "sites")
+a <- plotIRF(24, comparisons = "sites")
 b <- plotIRF(8, comparisons = "sites")
 
 plot_grid(a[[1]],b[[1]])
 
-a <- plotIRF(7, comparisons = "sites")
-b <- plotIRF(2, comparisons = "sites")
-
-plot_grid(a[[1]],b[[1]])
-
-plotIRF(36, comparisons = "sites")
+a <- plotIRF(14, comparisons = "sites")
 
 ```
 
 
 ### Presidential Candidates
 
-```{r candidates_sites}
-
-a <- plotIRF(37, comparisons = "sites")
-
-plot_grid(a[[1]],b[[1]])
+```{r candidates_sites, include=FALSE}
 
 a <- plotIRF(27, comparisons = "sites")
 b <- plotIRF(29, comparisons = "sites")
@@ -162,14 +153,13 @@ red (bottom left) = sources from red states
 
 purple (bottom rigth) = sources from purple states
 
-```{r issues_states}
+```{r issues_states, include=FALSE}
 par(mfrow = c(2,2))
 
+plotIRF(7, comparisons = "states")
+plotIRF(25, comparisons = "states")
 plotIRF(13, comparisons = "states")
 plotIRF(14, comparisons = "states")
-plotIRF(7, comparisons = "states")
-plotIRF(2, comparisons = "states")
-plotIRF(24, comparisons = "states")
 plotIRF(32, comparisons = "states")
 
 ```
@@ -177,32 +167,138 @@ plotIRF(32, comparisons = "states")
 
 
 ### Presidential Candidates
-```{r candidates_states}
+```{r candidates_states, include=FALSE}
 
 par(mfrow = c(2,2))
 
-plotIRF(37, comparisons = "states")
 plotIRF(28, comparisons = "states")
 plotIRF(27, comparisons = "states")
 plotIRF(29, comparisons = "states")
-plotIRF(30, comparisons = "states")
 
 ```
 
-```{r skeweness}
+```{r skeweness, include=FALSE}
 h = 6
 
+j = 1
+
 SKEWENESS <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[3]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[3]]$model$theta, lag.max = h)))
-        return(skewness(x))
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        #return(skewness(x))
+        return(skewness(x, method="l.moment"))
 })
 ```
+
+```{r kurtosis}
+h = 6
+
+j = 1
+
+KURTOSIS <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        #return(kurtosis(x))
+        return(kurtosis(x, method="l.moment"))
+})
+```
+
+```{r area}
+h = 6
+
+j = 1
+
+AREA <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        #return(kurtosis(x))
+        return(as.numeric(AUC(x = c(0:h), y = x), method = "spline"))
+})
+```
+
+```{r smoothness}
+h = 6
+
+j = 1
+
+IRF_SMOOTH <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        #return(kurtosis(x))
+        
+        plot(y = x, x = c(0:h), type = "b")
+        lines(smooth.spline(x = c(0:6), y = x))
+})
+```
+
+```{r slope}
+h = 6
+
+j = 1
+
+IRF_SLOPE <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        #return(kurtosis(x))
+        return(D1tr(y = x, x = c(0:h)))
+})
+
+```
+
+
+```{r 1stDerivative}
+h = 6
+
+j = 1
+
+IRF_1DERIV <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        #return(kurtosis(x))
+        return(D1ss(y = x, x = c(0:h)))
+})
+
+```
+
+
+```{r 2ndDerivative}
+h = 6
+
+j = 1
+
+IRF_2DERIV <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        #return(kurtosis(x))
+        return(D2ss(y = x, x = c(0:h)))
+})
+
+```
+
+
+```{r hist_ir}
+h = 6
+
+j = 1
+
+IRF_HIST <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        hist(x)
+})
+```
+
+```{r variance}
+h = 6
+
+j = 1
+
+VARIANCE <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        return(var(x))
+})
+```
+
 
 ```{r numPeaks}
 h = 6
 
+j = 1
+
 PEAKS <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[j]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         return(length(x[which(diff(sign(diff(x)))==-2)+1])+1)
 })
 ```
@@ -210,9 +306,15 @@ PEAKS <- lapply(seq_along(TOPICS), function(i){
 ```{r numDays}
 h = 6
 
+j = 1
+
 DAYS <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = SADJ_ARIMA_BASIC[[i]][[j]]$model$phi, ma = SADJ_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
-        return(which(abs(diff(x)) < 0.005)[1])
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        decay <- h+1
+        while (abs((x[decay] - x[decay - 1])) < 0.01){
+                decay <- decay - 1
+        }
+        return(decay)
 })
 ```
 
