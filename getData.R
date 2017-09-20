@@ -1,15 +1,15 @@
 readWebsites = function() {
         
-        states <- fread(file = WEBSITES_PATH, 
+        sites <- fread(file = WEBSITES_PATH,
                        sep = ",", 
                        header = T, 
                        select = c(1:3),
                        col.names = c("site", "country", "state"),
                        key = "country",
                        data.table = T)
-        states <- states["US"]
-        states[, country:=NULL]
-        states <- data.table:::unique.data.table(states, by = "site")
+        sites <- sites["US"]
+        sites[, country:=NULL]
+        sites <- data.table:::unique.data.table(sites, by = "site")
 }
 
 readStates = function() {

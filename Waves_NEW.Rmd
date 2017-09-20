@@ -85,7 +85,9 @@ relevant <- sapply(seq_along(topicCols), function(i) {length(unique(DT[, get(top
 TOPICS <- topicCols[relevant]
 
 byTopic <- lapply(seq_along(TOPICS), function(i){
-        DT[!is.na(get(TOPICS[i])), c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
+        # DT[!is.na(get(TOPICS[i])), c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
+        # cut @ 0.5 threshold
+        DT[get(TOPICS[i]) >= 0.5, c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
 })
 ```
 
@@ -100,67 +102,59 @@ articleCountPerState <- lapply(seq_along(TOPICS), function(i){
         getAggregated(byTopic[[i]], grpby = "state")
 })
 
+articleCount <- lapply(seq_along(TOPICS), function(i){
+        getAggregated(byTopic[[i]])
+})
+
 # check if there are no rows without topic in DT (sanity)
 if (length(DT[, rowSums(.SD, na.rm = T), .SDcols = TOPICS]) == nrow(DT)){
         TotalArticleCountPerSite <- getAggregated(DT, grpby = "site")
         TotalArticleCountPerState <- getAggregated(DT, grpby = "state")
+        TotalArticleCount <- getAggregated(DT)
 }
 
 # calculate daily Salience per site
-salience.site <- lapply(seq_along(TOPICS), function(i){
-        tmp <- merge(x = articleCountPerSite[[i]], 
-                     y = TotalArticleCountPerSite,
-                     by = c("publish_date", "site"),
-                     all.x = T)
-        tmp[, SaliencePerSite := N.x/N.y]
-        return(tmp)
-})
-
-# calculate daily Salience per state
-salience.state <- lapply(seq_along(TOPICS), function(i){
+salience.local <- lapply(seq_along(TOPICS), function(i){
         tmp <- merge(x = articleCountPerState[[i]], 
                      y = TotalArticleCountPerState,
                      by = c("publish_date", "state"),
                      all.x = T)
-        tmp[, SaliencePerState := N.x/N.y]
-        return(tmp)
+        tmp[state != "Nationwide", local := N.x/N.y]
+        tmp[state != "Nationwide", daily := lapply(.SD, mean), .SDcols = "local", by = "publish_date"]
+        return(unique(tmp[, .(publish_date, daily)]))
+})
+
+# calculate daily Salience per state
+salience.nationwide <- lapply(seq_along(TOPICS), function(i){
+        tmp <- merge(x = articleCountPerSite[[i]],
+                     y = TotalArticleCountPerSite,
+                     by = c("publish_date", "site"),
+                     all.x = T)
+        tmp[site %in% WEBSITES[state == "Nationwide", site], nationwide := N.x/N.y]
+        tmp[site %in% WEBSITES[state == "Nationwide", site], daily := lapply(.SD, mean), .SDcols = "nationwide", by = "publish_date"]
+        return(unique(tmp[, .(publish_date, daily)]))
+})
+
+salience.total <- lapply(seq_along(TOPICS), function(i){
+        tmp <- merge(x = articleCount[[i]], 
+                     y = TotalArticleCount,
+                     by = "publish_date",
+                     all.x = T)
+        tmp[, score := N.x/N.y]
+        return(unique(tmp[, .(publish_date, score)]))
 })
 ```
 
 ```{r scores}
 
-# add states (of origin of sources):
-setkey(WEBSITES, site)
-
 salience <- lapply(seq_along(TOPICS), function(i){
-        setkey(salience.site[[i]], site)
-        tmp <- merge(salience.site[[i]], WEBSITES, all = F, all.x = T)
-        merge(x = tmp[, .(publish_date, SaliencePerSite, site, state)], y = salience.state[[i]][, .(publish_date, SaliencePerState, state)], by = c("publish_date", "state"))
-})
-
-setkey(STATES, color)
-# calculate daily averages
-lapply(seq_along(TOPICS), function(i){
-# salience per site
-        salience[[i]][, DailySaliencePerSite := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
-# salience per state
-        salience[[i]][, DailySaliencePerState := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerState"]
-# group sources by states:
-        setkey(salience[[i]], "state")
-# salience in NATIONWIDE group
-        salience[[i]]["Nationwide", DailyNationwideSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
-# salience in LOCAL group
-        salience[[i]][!"Nationwide", DailyLocalSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
-# salience in BLUE group
-        salience[[i]][STATES["Blue", state], DailyBlueSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
-# salience in RED group
-        salience[[i]][STATES["Red", state], DailyRedSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
-# salience in PURPLE group
-        salience[[i]][STATES["Purple", state], DailyPurpleSalience := lapply(.SD, mean), by = c("publish_date"), .SDcols = "SaliencePerSite"]
+        tmp <- merge(salience.local[[i]], salience.nationwide[[i]], all = T)
+        tmp[, score := lapply(.SD, mean, na.rm = T), .SDcols = "daily", by = "publish_date"]
+        return(unique(tmp[, .(publish_date, score)]))
 })
 
 byTopic <- lapply(seq_along(TOPICS), function(i){
-        merge(x = byTopic[[i]], y = salience[[i]], by = c("publish_date", "site", "state"), all = T)
+        merge(x = byTopic[[i]], y = salience[[i]], by = c("publish_date"), all.x = T, all = F)
 })
 
 ```
@@ -169,7 +163,17 @@ byTopic <- lapply(seq_along(TOPICS), function(i){
 # do padding of dates set missing dates values to 0 (instead fo NA)
 byTopic <- lapply(seq_along(TOPICS), function(i){
         setDates(byTopic[[i]], DATES)
+        # print (paste("finished topic", i, sep = " "))
+        
 })
+
+# byTopic <- lapply(seq_along(TOPICS), function(i){
+#         lapply(seq(8,14,1), function(j){
+#                 set(byTopic[[i]], which(is.na(byTopic[[i]][[j]])), j, 0)
+#         })
+#         print(i)
+# })
+        
 ```
 
 ```{r collection_issues}
@@ -183,76 +187,49 @@ byTopic <- lapply(seq_along(TOPICS), function(i){
 
 
 ```{r descriptive}
-scores <- colnames(byTopic[[1]])[8:14]
 SUMMARY <- lapply(seq_along(TOPICS), function(i){
-        byTopic[[i]][, sapply(.SD, summary), .SDcols = scores]
+        byTopic[[i]][, sapply(.SD, summary), .SDcols = "score"]
 })
 ```
-
-```{r group}
-# melt data for plotting with facets:
-byTopic_m <- lapply(seq_along(TOPICS), function(i){
-        melt(data = byTopic[[i]], measure.vars = scores)
-})
-```
-
-```{r zeros}
-# remove leading zeros
-byTopic_m <- lapply(seq_along(TOPICS), function(i){
-        byTopic_m[[i]][(byTopic_m[[i]][, cumsum(value), by = variable] != 0)[,2]]
-})
-```
-
-```{r dim}
-byTopic_m <- lapply(seq_along(TOPICS), function(i){
-        dt <- lapply(scores, function(j){
-                unique(unique(byTopic_m[[i]][variable == j, .(variable, value), by = .(publish_date)])[, value := sum(value), by = .(publish_date)])
-        })
-return(rbindlist(dt))
-})
-
-
-```
-
 
 ```{r hist_plot}
 HIST <- lapply(seq_along(TOPICS), function(i){
-        qplot(data = byTopic_m[[i]], x = value, geom = "histogram") + facet_wrap(~variable, ncol = 3)
+        qplot(data = byTopic[[i]], x = score, geom = "histogram")
 })
 ```
 
 ```{r ts_plot}
 TS <- lapply(seq_along(TOPICS), function(i){
-        qplot(data = byTopic_m[[i]], x = publish_date, y = value, geom = "line") + facet_wrap(~variable, ncol = 1)
+        qplot(data = byTopic[[i]], x = publish_date, y = score, geom = "line")
 })
+TS <- setNames(TS, TOPICS)
 ```
 
 ```{r diff_plot}
 DIFF <- lapply(seq_along(TOPICS), function(i){
-        qplot(data = byTopic_m[[i]], x = publish_date, y = c(0, diff(value)), geom = "line") + facet_wrap(~variable, ncol = 1)
+        qplot(data = byTopic[[i]], x = publish_date, y = c(0, diff(score)), geom = "line")
 })
 ```
 
 ```{r ts_vs_diff}
 TSvsDIFF <- lapply(seq_along(TOPICS), function(i){
-        plot_grid(TS[[i]], DIFF[[i]], align='h', labels=c('Original', 'Diff'))
+        plot_grid(TS[[i]], DIFF[[i]], align='v', labels=c('Original', 'Diff'))
 })
 ```
 
 ```{r diff_descriptive}
 
-
 DIFF_SUMMARY <- lapply(seq_along(TOPICS), function(i){
-        dt <- lapply(scores, function(j){
-                d <- unique(byTopic[[i]][, c("publish_date", j), with = F])[, sapply(.SD, sum), .SDcols = j, by = .(publish_date)]
-                summary(diff(d$V1))
-        })
+        
+                d <- byTopic[[i]][, diff(score)]
+                summary(d)
+        
 })
 ```
 
 ```{r diff_hist_plot}
 DIFF_HIST <- lapply(seq_along(TOPICS), function(i){
-        qplot(data = byTopic_m[[i]], x = c(0,diff(value)), geom = "histogram") + facet_wrap(~variable, ncol = 3)
+        qplot(data = byTopic[[i]], x = c(0,diff(score)), geom = "histogram")
 })
 ```
 
@@ -264,47 +241,23 @@ HIST_TSvsDIFF <- lapply(seq_along(TOPICS), function(i){
 
 ```{r acf_plot}
 ACF <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(scores, function(j){
-                Acf(x = byTopic_m[[i]][variable == j, value], plot = F)
-        })
-        setNames(byScore, scores)
+        Acf(x = byTopic[[i]][, score], plot = F)
 })
 ACF <- setNames(ACF, TOPICS)
 ```
 
 ```{r pacf_plot}
 PACF <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(scores, function(j){
-                Acf(x = byTopic_m[[i]][variable == j, value], 
+                Acf(x = byTopic[[i]][, score], 
                     plot = F,
                     type = "partial")
-                
-        })
-        setNames(byScore, scores)
 })
 PACF <- setNames(PACF, TOPICS)
 ```
 
-```{r autocov_plot}
-ACOVF <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(scores, function(j){
-                Acf(x = byTopic_m[[i]][variable == j, value], 
-                    plot = F,
-                    type = "covariance")
-                
-        })
-        setNames(byScore, scores)
-})
-ACOVF <- setNames(ACOVF, TOPICS)
-```
-
-
 ```{r diff_acf_plot}
 DIFF_ACF <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(scores, function(j){
-                Acf(x = byTopic_m[[i]][variable == j, diff(value)], plot = F)
-        })
-        setNames(byScore, scores)
+        Acf(x = byTopic[[i]][, diff(score)], plot = F)
 })
 DIFF_ACF <- setNames(DIFF_ACF, TOPICS)
 
@@ -312,33 +265,30 @@ DIFF_ACF <- setNames(DIFF_ACF, TOPICS)
 
 ```{r diff_pacf_plot}
 DIFF_PACF <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(scores, function(j){
-                Acf(x = byTopic_m[[i]][variable == j, diff(value)], plot = F, type = "partial")
-        })
-        setNames(byScore, scores)
+        Acf(x = byTopic[[i]][, diff(score)], plot = F, type = "partial")
 })
 DIFF_PACF <- setNames(DIFF_PACF, TOPICS)
 ```
 
-```{r dummy}
+```{r dummy, include=FALSE}
 dummy <- DATES[publish_date >= start]
 
 disp <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "electionDay", "DemEvents", "RepEvents")
 ```
 
-```{r weekends}
+```{r weekends, include=FALSE}
 dummy[weekdays(publish_date) %in% c("Saturday", "Sunday"), weekend := 1]
 dummy[, weekend := na.fill(weekend, 0)]
 ```
 
-```{r weekdays}
+```{r weekdays, include=FALSE}
         dummy[, weekday := weekdays(publish_date)]
         dummy[, weekday := as.factor(weekday)]
         dummy[, sort(weekdays(Sys.Date()+0:6))[2:7] := data.table(model.matrix(~weekday)[,2:7])]
         dummy[, Friday := ifelse(weekday == "Friday", 1, 0)]
 ```
 
-```{r holidays}
+```{r holidays, include=FALSE}
 # US holidays without election day
 HOLIDAYS <- as.Date(holiday(year = 2016, Holiday = c(listHolidays(pattern = "US")[c(1:4, 6:17)], listHolidays(pattern = "Easter"))))
 
@@ -346,7 +296,7 @@ dummy[publish_date %in% HOLIDAYS, holiday := 1]
 dummy[, holiday := na.fill(holiday, 0)]
 ```
 
-```{r elections+debates}
+```{r elections+debates, include=FALSE}
 # US holidays without election day
 ELECTIONS <- c(as.Date("2016-02-01"), as.Date("2016-02-09"), as.Date("2016-02-20"), as.Date("2016-03-01"), as.Date("2016-03-05"), as.Date("2016-03-06"), as.Date("2016-03-08"), as.Date("2016-03-12"), as.Date("2016-03-15"), as.Date("2016-03-22"), as.Date("2016-04-05"), as.Date("2016-04-09"), as.Date("2016-04-19"), as.Date("2016-04-26"), as.Date("2016-05-03"), as.Date("2016-05-10"), as.Date("2016-05-17"), as.Date("2016-05-24"), as.Date("2016-06-07"), as.Date("2016-09-26"), as.Date("2016-10-04"), as.Date("2016-10-09"), as.Date("2016-10-19"), as.Date("2016-11-08"))
 
@@ -354,14 +304,14 @@ dummy[publish_date %in% ELECTIONS, electionDay := 1]
 dummy[, electionDay := na.fill(electionDay, 0)]
 ```
 
-```{r democratic}
+```{r democratic, include=FALSE}
 DEMS <- c(as.Date("2016-02-27"), as.Date("2016-03-21"),  as.Date("2016-03-26"), as.Date("2016-05-07"), as.Date("2016-06-04"), as.Date("2016-06-05"), as.Date("2016-06-14"), as.Date("2016-07-25"), as.Date("2016-07-26"), as.Date("2016-07-27"), as.Date("2016-07-28"))
 
 dummy[publish_date %in% DEMS, DemEvents := 1]
 dummy[, DemEvents := na.fill(DemEvents, 0)]
 ```
 
-```{r republican}
+```{r republican, include=FALSE}
 REPS <- c(as.Date("2016-01-28"), as.Date("2016-02-06"),  as.Date("2016-02-23"), as.Date("2016-02-25"), as.Date("2016-03-03"), as.Date("2016-03-10"), as.Date("2016-04-03"), as.Date("2016-04-16"), as.Date("2016-07-18"), as.Date("2016-07-19"), as.Date("2016-07-20"), as.Date("2016-07-21"))
 
 dummy[publish_date %in% REPS, RepEvents := 1]
@@ -369,10 +319,10 @@ dummy[, RepEvents := na.fill(RepEvents, 0)]
 ```
 
 ```{r interesting}
-interesting <- c(8, 18, 32, 37)
+interesting <- c(8, 12, 18, 25, 31, 37, 28, 30)
 ```
 
-```{r weekly}
+```{r weekly, include=FALSE}
 # how many obs. each day? (given one TS)
 cbind(dummy, as.numeric(t[,1]))[V2 > 0, .N, by = weekday]
 ```
@@ -380,32 +330,64 @@ cbind(dummy, as.numeric(t[,1]))[V2 > 0, .N, by = weekday]
 ## ARIMA models
 # AR(p) Model: 
 $x_t$ = $\phi$$x_{t-1}$ + $\epsilon_t$
-```{r arima_basic}
-ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
+
+```{r arima_model}
+ARIMA_BASIC <- lapply(interesting, function(i){
+                model <- NULL
+                if (byTopic[[i]][, .N] > 0){
+                        t <- ts(unique(byTopic[[i]][, .(publish_date, score)]))[,2]
+                        tryCatch({model <- auto.arima(y = t)}, error=function(e) e)
+                }
+        return(model)
+})
+
+ARIMA_BASIC <- setNames(ARIMA_BASIC, TOPICS[interesting])
+
+S_ARIMA_BASIC <- lapply(interesting, function(i){
+                model <- NULL
+                if (byTopic[[i]][, .N] > 0){
+                        t <- ts(unique(byTopic[[i]][, .(publish_date, score)]), freq = 7)[,2]
+                        tryCatch({model <- auto.arima(y = t)}, error=function(e) e)
+                }
+        return(model)
+})
+
+S_ARIMA_BASIC <- setNames(ARIMA_BASIC, TOPICS[interesting])
+
+TSO <- lapply(interesting, function(i){
+                model <- NULL
+                if (byTopic[[i]][, .N] > 0){
+                        t <- ts(unique(byTopic[[i]][, .(publish_date, score)]))[,2]
+                        tryCatch({model <- tso(y = t)}, error=function(e) e)
+                }
+        return(model)
+})
+
+TSO <- setNames(TSO, TOPICS[interesting])
+
+S_TSO <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
-                t <- ts(byTopic_m[[i]][variable == j, value])
-                model <- auto.arima(t)
+                model <- NULL
+                if (byTopic[[i]][, .N] > 0){
+                        t <- ts(unique(byTopic[[i]][, .(publish_date, score)]), freq = 7)[,2]
+                        tryCatch({model <- tso(y = t)}, error=function(e) e)
+                } 
+        return(model)
         })
 })
 
-S_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(scores, function(j){
-                t <- ts(byTopic_m[[i]][variable == j, value], freq = 7)
-                model <- auto.arima(t, d = 1)
-        })
-})
-
-SADJ_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(scores, function(j){
-                t <- ts(byTopic_m[[i]][variable == j, value], freq = 7)
-                t <- seasadj(stl(t, s.window = "periodic"))
-                model <- auto.arima(t, d = 1)
-        })
-})
+S_TSO <- setNames(S_TSO, TOPICS[interesting])
+# SADJ_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
+#         byScore <- lapply(scores, function(j){
+#                 t <- ts(byTopic_m[[i]][variable == j, value], freq = 7)
+#                 t <- seasadj(stl(t, s.window = "periodic"))
+#                 model <- auto.arima(t, d = 1)
+#         })
+# })
 ```
 
 # regression with ARIMA errors:
-```{r RegArima_basic}
+```{r RegArima_basic, include=FALSE}
 ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
                
@@ -424,7 +406,7 @@ setNames(byScore, scores)
 ARIMA <- setNames(ARIMA, TOPICS)
 ```
 
-```{r arima_seasonal}
+```{r arima_seasonal, include=FALSE}
 S_ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
                 dt <- unique(byTopic_m[[i]][variable == j, value, by = .(publish_date)])[, sum(value), by = "publish_date"]
@@ -455,7 +437,7 @@ setNames(byScore, scores)
 S_ARIMA <- setNames(S_ARIMA, TOPICS)
 ```
 
-```{r arima_outliers_basic}
+```{r arima_outliers_basic, include=FALSE}
 TSO_ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
                 dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", sort(weekdays(Sys.Date()+0:6))[2:7], "weekend", "holiday","electionDay")])  
@@ -478,7 +460,7 @@ TSO_ARIMA <- lapply(seq_along(TOPICS), function(i){
 TSO_ARIMA <- setNames(TSO_ARIMA, TOPICS)
 ```
 
-```{r arima_outliers_seasonal}
+```{r arima_outliers_seasonal, include=FALSE}
 TSO_S_ARIMA <- lapply(seq_along(TOPICS), function(i){
         byScore <- lapply(scores, function(j){
                 dt <- unique(byTopic_m[[i]][variable == j, c("publish_date", "value", sort(weekdays(Sys.Date()+0:6))[2:7], "weekend", "holiday", "electionDay")])  
@@ -501,72 +483,88 @@ TSO_S_ARIMA <- setNames(TSO_S_ARIMA, TOPICS)
 # Diagnostics
 
 ```{r tsdiag}
-DIAGPLOT <- lapply(seq_along(TOPICS), function(i){
-        r <- lapply(1:7, function(j){
-                tsdiag(S_ARIMA_BASIC[[i]][[j]])        
-        })
+DIAGPLOT <- lapply(seq_along(interesting), function(i){
+        r <- NULL        
+        if (!is.null(ARIMA_BASIC[[i]])){
+                        r <- tsdiag(ARIMA_BASIC[[i]])
+        }
         return(r)
 })
+DIAGPLOT <- setNames(DIAGPLOT, TOPICS[interesting])
+
+S_DIAGPLOT <- lapply(seq_along(interesting), function(i){
+        r <- NULL        
+        if (!is.null(S_ARIMA_BASIC[[i]])){
+                        r <- tsdiag(S_ARIMA_BASIC[[i]])
+        }
+        return(r)
+})
+S_DIAGPLOT <- setNames(S_DIAGPLOT, TOPICS[interesting])
+
+
+
 ```
 
 ```{r fit}
-ACTUALvsFITTED <- lapply(seq_along(TOPICS), function(i){
-        r <- lapply(1:7, function(j){
-                plot(S_ARIMA_BASIC[[i]][[j]]$x, type = "l")
-                lines(S_ARIMA_BASIC[[i]][[j]]$fitted, col = "red")
-        })
+ACTUALvsFITTED <- lapply(seq_along(interesting), function(i){
+        r <- NULL        
+        if (!is.null(ARIMA_BASIC[[i]])){
+                        plot(ARIMA_BASIC[[i]]$x, type = "l", main = TOPICS[interesting[i]])
+                        lines(ARIMA_BASIC[[i]]$fitted, col = "red")
+        }
         return(r)
 })
+ACTUALvsFITTED <- setNames(ACTUALvsFITTED, TOPICS[interesting])
+
+S_ACTUALvsFITTED <- lapply(seq_along(interesting), function(i){
+        
+        plot(S_ARIMA_BASIC[[i]]$x, type = "l", main = TOPICS[interesting[i]])
+        lines(S_ARIMA_BASIC[[i]]$fitted, col = "red")
+})
+S_ACTUALvsFITTED <- setNames(S_ACTUALvsFITTED, TOPICS[interesting])
+
+TSO_ACTUALvsFITTED <- lapply(seq_along(interesting), function(i){
+        plot(TSO_BASIC[[i]]$fit$x, type = "l", main = TOPICS[interesting[i]])
+        lines(TSO_BASIC[[i]]$fit$fitted, col = "red")
+})
+TSO_ACTUALvsFITTED <- setNames(TSO_ACTUALvsFITTED, TOPICS[interesting])
 ```
 
 ```{r serial_test}
-SERIALCORR <- lapply(seq_along(TOPICS), function(i){
-        r <- lapply(1:7, function(j){
-                bgtest(S_ARIMA_BASIC[[i]][[j]]$residuals ~ 1, order = 7)        
-        })
-        names(r) <- scores
-        return(r)
+SERIALCORR <- lapply(seq_along(interesting), function(i){
+        bgtest(ARIMA_BASIC[[i]]$residuals ~ 1, order = 7)        
+        
 })
-names(SERIALCORR) <- TOPICS
+SERIALCORR <- setNames(SERIALCORR, TOPICS[interesting])
 ```
 
 ```{r arch_test}
-ARCH <- lapply(seq_along(TOPICS), function(i){
-        r <- lapply(1:7, function(j){
-                ArchTest(S_ARIMA_BASIC[[i]][[j]]$residuals, lags = 7)        
-        })
-        names(r) <- scores
-        return(r)
+ARCH <- lapply(seq_along(interesting), function(i){
+        ArchTest(ARIMA_BASIC[[i]]$residuals, lags = 7)        
 })
-names(ARCH) <- TOPICS
+ARCH <- setNames(ARCH, TOPICS[interesting])
 ```
 
 ```{r normality_test}
-NORM <- lapply(seq_along(TOPICS), function(i){
-        r <- lapply(1:7, function(j){
-                JarqueBeraTest(S_ARIMA_BASIC[[i]][[j]]$residuals, robust = T)        
-        })
-        names(r) <- scores
-        return(r)
+NORM <- lapply(seq_along(interesting), function(i){
+        JarqueBeraTest(ARIMA_BASIC[[i]]$residuals, robust = T)        
+        
 })
-names(NORM) <- TOPICS
+NORM <- setNames(NORM, TOPICS[interesting])
 ```
 
 ```{r hypothesis_testing}
-DIAGTEST <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(1:7, function(j){
-                test <- sum(
-                        # NORM[[i]][[j]]$p.value > 0.05,
-                        ARCH[[i]][[j]]$p.value > 0.05,
-                        SERIALCORR[[i]][[j]]$p.value > 0.05
-                )
-                if (test == 2) {
-                        print(paste(i, TOPICS[i], j, scores[j], sep = " - "))}
-                return(test)
-        })
-        names(byScore) <- scores
+DIAGTEST <- lapply(seq_along(interesting), function(i){
+        test <- sum(
+                # NORM[[i]][[j]]$p.value > 0.05,
+                ARCH[[i]]$p.value > 0.05,
+                SERIALCORR[[i]]$p.value > 0.05
+        )
+        if (test == 2) {
+                print(TOPICS[interesting[i]])}
+        return(test)
 })
-names(DIAGTEST) <- TOPICS
+DIAGTEST <- setNames(DIAGTEST, TOPICS[interesting])
 
 ```
 

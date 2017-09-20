@@ -21,7 +21,7 @@ load(file = "topics")
 
 ```{r plot_s_irf}
 
-plotIRF <- function(topicID, comparisons = "", h = 6){
+plotIRF <- function(topicID, comparisons = "", h = 30){
         lapply(topicID, function(i) {
                 if (comparisons == ""){
                         ir <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[1]]$model$phi, ma = S_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
@@ -68,23 +68,13 @@ TOPICS
 ```{r issues_all}
 par(mfrow = c(1,2))
 
-plotIRF(2)
-plotIRF(14)
-
-plotIRF(23)
+plotIRF(25)
 plotIRF(31)
-
-plotIRF(24)
-plotIRF(19)
 
 plotIRF(12)
 plotIRF(8)
 
-plotIRF(32)
 plotIRF(18)
-
-plotIRF(25)
-plotIRF(7)
 
 ```
 
@@ -240,6 +230,18 @@ IRF_SLOPE <- lapply(seq_along(TOPICS), function(i){
 
 ```
 
+```{r shape}
+h = 6
+
+j = 1
+
+IRF_SHAPE <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        #return(kurtosis(x))
+        return(D1tr(y = D1tr(y = x, x = c(0:h)), x = c(0:h)))
+})
+
+```
 
 ```{r 1stDerivative}
 h = 6
@@ -249,7 +251,7 @@ j = 1
 IRF_1DERIV <- lapply(seq_along(TOPICS), function(i){
         x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(kurtosis(x))
-        return(D1ss(y = x, x = c(0:h)))
+        return(D1ss(y = x, x = c(1:(h+1))))
 })
 
 ```
@@ -318,60 +320,68 @@ DAYS <- lapply(seq_along(TOPICS), function(i){
 })
 ```
 
-```{r typology}
-typology.all <- data.table(cbind(TOPICS, PEAKS, DAYS))
-typology.nationwide <- data.table(cbind(TOPICS, PEAKS, DAYS))
-typology.local <- data.table(cbind(TOPICS, PEAKS, DAYS))
-issues_all <- c(13, 14,7,2,23,31,24,19,11,8,32,18,36)
-candidates_all <- c(37,28,27,29,30)
-issues_nvl = c(13,14,7,2,8,32,36)
-candidates_nvl = c(37,27,29,30)
+```{r irf}
 
-# cbind(plot = seq_along(TOPICS[issues_nvl]), topic = TOPICS[issues_nvl])
+h = 100
 
-x <- as.numeric(typology.all[issues_nvl, DAYS][4:6])
-y <- as.numeric(typology.all[issues_nvl, PEAKS][4:6])
+j = 1
 
-x1 <- as.numeric(typology.nationwide[issues_nvl, DAYS][4:6])
-y1 <- as.numeric(typology.nationwide[issues_nvl, PEAKS][4:6])
+IRF <- lapply(seq_along(TOPICS), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+})
 
-x2 <- as.numeric(typology.local[issues_nvl, DAYS][4:6])
-y2 <- as.numeric(typology.local[issues_nvl, PEAKS][4:6])
+IRF <- setNames(IRF, TOPICS)
+```
 
-# labels <- as.character(typology[issues_all, TOPICS])
-labels <- TOPICS[issues_nvl][4:6]
+```{r plotly}
 
-plot(x = x, y = y, ylim = c(0, 5), xlim = c(0, 5), xlab = "DAYS", ylab = "PEAKS", main = "Policy Issues: All Sources")
-text(x = x, y = y, labels = labels, pos = rep(c(1,2,3,4),2), cex = 0.7, offset = 0.5)
-points(x = x1, y = y1, col = "gray")
-text(x = x1, y = y1, labels = labels, pos = rep(c(1,2,3,4),2), cex = 0.7, offset = 0.5, col = "gray")
-points(x = x2, y = y2, col = "green")
-text(x = x2, y = y2, labels = labels, pos = rep(c(1,2,3,4),2), cex = 0.7, offset = 0.5, col = "green")
-legend(legend = c("all", "nationwide", "local") , x = "bottomright", fill = c("black", "gray", "green"))
+h = 20
 
-# cbind(plot = seq_along(TOPICS[candidates_all]), topic = TOPICS[candidates_all])
+j = 1
 
-x <- as.numeric(typology.all[issues_nvl, DAYS][c(1,2,4:6)])
-y <- as.numeric(typology.all[issues_nvl, PEAKS][c(1,2,4:6)])
-labels <- TOPICS[issues_nvl][c(1,2,4:6)]
-plot(x = x, y = y, ylim = c(0, 5), xlim = c(0, 7), xlab = "DAYS", ylab = "PEAKS", main = "Policy Issues: All Sources")
-text(x = x, y = y, labels = labels, pos = c(1,3,3,4), cex = 0.7, offset = 0.5)
+interesting = c(8,12,18,25,31,37,27,28,29,30)
 
+pltly <- plotly::plot_ly(type = "scatter", mode = "lines") 
+for (i in 1: length(TOPICS[interesting])){
+        pltly <- plotly::add_trace(p = pltly, y = byTopic[[interesting[i]]][[6]], x = byTopic[[interesting[i]]][[1]], name = TOPICS[interesting][i])
+}
 
-x1 <- as.numeric(typology.nationwide[candidates_nvl, DAYS])
-y1 <- as.numeric(typology.nationwide[candidates_nvl, PEAKS])
-
-x2 <- as.numeric(typology.local[candidates_nvl, DAYS])
-y2 <- as.numeric(typology.local[candidates_nvl, PEAKS])
-
-labels <- TOPICS[candidates_nvl]
-
-
-plot(x = NULL, y = NULL, ylim = c(0, 5), xlim = c(0, 7), xlab = "DAYS", ylab = "PEAKS", main = "Candidates: Natiobwide vs Local")
-#points(x = x1, y = y1, col = "blue", pch = 1)
-text(x = x1, y = y1, labels = labels, pos = c(1,2,3,4), cex = 0.7, offset = 0.5, col = "blue")
-#points(x = x2, y = y2, col = "green", pch = 2)
-text(x = x2, y = y2, labels = labels, pos = c(1,4,4,3), cex = 0.7, offset = 0.5, col = "green")
-legend(legend = c("nationwide", "local") , x = "topright", fill = c("blue", "green"))
+pltly
 
 ```
+
+```{r typology}
+TYPE <- c(NA, 2, NA, NA, NA, NA, NA, 1, NA, NA, NA, 1, NA, 2, NA, NA, NA, 1, 1, NA, NA, NA, 3, 2, 3, NA, 3, 3, 2, 1, 2, 3, NA, NA, NA, NA, 1)
+
+typology <- data.table(cbind(TOPICS, DAYS, TYPE))
+typology[, DAYS := as.character(DAYS)]
+typology <- typology[interesting]
+
+setorder(typology, DAYS)
+
+typology
+```
+
+```{r texts}
+###############################################################################
+#                          READ TEXT PER CATEGORY                             #        
+###############################################################################
+
+
+
+# show first and last (chronologicaly) sentences from articles each category, along with category_broba
+# or set key to include category_proba to examine strength at top/bottom
+texts = lapply(seq_along(TOPICS), FUN = function(i){
+        # datatable(rbind(
+        #         head(
+        #                 DT[.(CATEGORIES[i]), .(title, sent_text, category_proba), by = article_id], 
+        #                 options = list(autoWidth = T)),
+        #         tail(
+        #                 DT[.(CATEGORIES[i]), .(title, sent_text, category_proba), by = article_id], 
+        #                 options = list(autoWidth = T))))
+        datatable(DT[!is.na(TOPICS[i]), .(publish_date, site, title),], 
+                  options = list(autoWidth = T))
+})
+```
+
+
