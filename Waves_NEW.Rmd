@@ -86,8 +86,8 @@ TOPICS <- topicCols[relevant]
 
 byTopic <- lapply(seq_along(TOPICS), function(i){
         # DT[!is.na(get(TOPICS[i])), c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
-        # cut @ 0.5 threshold
-        DT[get(TOPICS[i]) >= 0.5, c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
+        # cut @ 0.05 threshold (more than one sentence identified out of first 20)
+        DT[get(TOPICS[i]) > 0.05, c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
 })
 ```
 
@@ -353,30 +353,30 @@ S_ARIMA_BASIC <- lapply(interesting, function(i){
 })
 
 S_ARIMA_BASIC <- setNames(ARIMA_BASIC, TOPICS[interesting])
-
-TSO <- lapply(interesting, function(i){
-                model <- NULL
-                if (byTopic[[i]][, .N] > 0){
-                        t <- ts(unique(byTopic[[i]][, .(publish_date, score)]))[,2]
-                        tryCatch({model <- tso(y = t)}, error=function(e) e)
-                }
-        return(model)
-})
-
-TSO <- setNames(TSO, TOPICS[interesting])
-
-S_TSO <- lapply(seq_along(TOPICS), function(i){
-        byScore <- lapply(scores, function(j){
-                model <- NULL
-                if (byTopic[[i]][, .N] > 0){
-                        t <- ts(unique(byTopic[[i]][, .(publish_date, score)]), freq = 7)[,2]
-                        tryCatch({model <- tso(y = t)}, error=function(e) e)
-                } 
-        return(model)
-        })
-})
-
-S_TSO <- setNames(S_TSO, TOPICS[interesting])
+# 
+# TSO <- lapply(interesting, function(i){
+#                 model <- NULL
+#                 if (byTopic[[i]][, .N] > 0){
+#                         t <- ts(unique(byTopic[[i]][, .(publish_date, score)]))[,2]
+#                         tryCatch({model <- tso(y = t)}, error=function(e) e)
+#                 }
+#         return(model)
+# })
+# 
+# TSO <- setNames(TSO, TOPICS[interesting])
+# 
+# S_TSO <- lapply(seq_along(TOPICS), function(i){
+#         byScore <- lapply(scores, function(j){
+#                 model <- NULL
+#                 if (byTopic[[i]][, .N] > 0){
+#                         t <- ts(unique(byTopic[[i]][, .(publish_date, score)]), freq = 7)[,2]
+#                         tryCatch({model <- tso(y = t)}, error=function(e) e)
+#                 } 
+#         return(model)
+#         })
+# })
+# 
+# S_TSO <- setNames(S_TSO, TOPICS[interesting])
 # SADJ_ARIMA_BASIC <- lapply(seq_along(TOPICS), function(i){
 #         byScore <- lapply(scores, function(j){
 #                 t <- ts(byTopic_m[[i]][variable == j, value], freq = 7)
@@ -523,11 +523,11 @@ S_ACTUALvsFITTED <- lapply(seq_along(interesting), function(i){
 })
 S_ACTUALvsFITTED <- setNames(S_ACTUALvsFITTED, TOPICS[interesting])
 
-TSO_ACTUALvsFITTED <- lapply(seq_along(interesting), function(i){
-        plot(TSO_BASIC[[i]]$fit$x, type = "l", main = TOPICS[interesting[i]])
-        lines(TSO_BASIC[[i]]$fit$fitted, col = "red")
-})
-TSO_ACTUALvsFITTED <- setNames(TSO_ACTUALvsFITTED, TOPICS[interesting])
+# TSO_ACTUALvsFITTED <- lapply(seq_along(interesting), function(i){
+#         plot(TSO_BASIC[[i]]$fit$x, type = "l", main = TOPICS[interesting[i]])
+#         lines(TSO_BASIC[[i]]$fit$fitted, col = "red")
+# })
+# TSO_ACTUALvsFITTED <- setNames(TSO_ACTUALvsFITTED, TOPICS[interesting])
 ```
 
 ```{r serial_test}
@@ -569,30 +569,20 @@ DIAGTEST <- setNames(DIAGTEST, TOPICS[interesting])
 ```
 
 ```{r coeftest}
-COEF_SIG <- lapply(seq_along(TOPICS), function(i){
-        
-        byScore <- lapply(seq_along(scores), function(j){
-                
-                coeftest(S_ARIMA_BASIC[[i]][[j]])
-        })
+COEF_SIG <- lapply(seq_along(TOPICS[interesting]), function(i){
+        coeftest(ARIMA_BASIC[[i]])
 })
 ```
 
 ```{r residual_acf}
-RESID_ACF <- lapply(seq_along(TOPICS), function(i){
-        r <- lapply(1:7, function(j){
-                Acf(S_ARIMA_BASIC[[i]][[j]]$residuals, plot = F)        
-        })
-        return(r)
+RESID_ACF <- lapply(seq_along(TOPICS[interesting]), function(i){
+        Acf(ARIMA_BASIC[[i]]$residuals, plot = F)        
 })
 ```
 
 ```{r residual_pacf}
-RESID_PACF <- lapply(seq_along(TOPICS), function(i){
-        r <- lapply(1:7, function(j){
-                Acf(S_ARIMA_BASIC[[i]][[j]]$residuals, plot = F, type = "partial")        
-        })
-        return(r)
+RESID_PACF <- lapply(seq_along(TOPICS[interesting]), function(i){
+        Acf(ARIMA_BASIC[[i]]$residuals, plot = F, type = "partial")        
 })
 ```
 

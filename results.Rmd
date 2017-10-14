@@ -9,6 +9,7 @@ Modeling patterns of daily changes in salience of political topics in US news we
 knitr::opts_chunk$set(results='hide', echo=FALSE)
 
 require(data.table)
+require(DT)
 require(ggplot2)
 require(cowplot)
 require(e1071)
@@ -24,13 +25,13 @@ load(file = "topics")
 plotIRF <- function(topicID, comparisons = "", h = 30){
         lapply(topicID, function(i) {
                 if (comparisons == ""){
-                        ir <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[1]]$model$phi, ma = S_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        ir <- cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[1]]$model$phi, ma = ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
                         plot(y = ir, x = c(1:(h+1)), type = "l", lwd = 2, main = TOPICS[[i]], ylab = "Shock", xlab = "Days", xlim = range(1,(h+1)), ylim = range(0,1)) #), sub = skewness(ir)+kurtosis(ir))
                 } else if(comparisons == "states"){ 
-                        black <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[1]]$model$phi, ma = S_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
-                        blue <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[5]]$model$phi, ma = S_ARIMA_BASIC[[i]][[5]]$model$theta, lag.max = h)))
-                        red <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[6]]$model$phi, ma = S_ARIMA_BASIC[[i]][[6]]$model$theta, lag.max = h)))
-                        purple <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[7]]$model$phi, ma = S_ARIMA_BASIC[[i]][[7]]$model$theta, lag.max = h)))
+                        black <- cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[1]]$model$phi, ma = ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        blue <- cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[5]]$model$phi, ma = ARIMA_BASIC[[i]][[5]]$model$theta, lag.max = h)))
+                        red <- cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[6]]$model$phi, ma = ARIMA_BASIC[[i]][[6]]$model$theta, lag.max = h)))
+                        purple <- cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[7]]$model$phi, ma = ARIMA_BASIC[[i]][[7]]$model$theta, lag.max = h)))
                         
 
                         plot( y = black,x = c(1:(h+1)), type = "l", lwd = 2,  ylab = "Shock", xlab = "Days", xlim = range(1,(h+1)), ylim = range(0,1), main = TOPICS[[i]]) 
@@ -39,9 +40,9 @@ plotIRF <- function(topicID, comparisons = "", h = 30){
                         plot( y = purple, x = c(1:(h+1)), type = "l", lwd = 2, ylab = "Shock", xlab = "Days", xlim = range(1,(h+1)), ylim = range(0,1), col = "purple")
                                                                                      
                 } else if (comparisons == "sites"){
-                        black <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[1]]$model$phi, ma = S_ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
-                        orange <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[3]]$model$phi, ma = S_ARIMA_BASIC[[i]][[3]]$model$theta, lag.max = h)))
-                        green <- cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[4]]$model$phi, ma = S_ARIMA_BASIC[[i]][[4]]$model$theta, lag.max = h)))
+                        black <- cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[1]]$model$phi, ma = ARIMA_BASIC[[i]][[1]]$model$theta, lag.max = h)))
+                        orange <- cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[3]]$model$phi, ma = ARIMA_BASIC[[i]][[3]]$model$theta, lag.max = h)))
+                        green <- cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[4]]$model$phi, ma = ARIMA_BASIC[[i]][[4]]$model$theta, lag.max = h)))
                         
                         sites <- as.data.table(cbind(black, orange, green, days = c(0:h)))
                         sites <- melt(sites, id.vars = "days")
@@ -173,7 +174,7 @@ h = 6
 j = 1
 
 SKEWENESS <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(skewness(x))
         return(skewness(x, method="l.moment"))
 })
@@ -185,7 +186,7 @@ h = 6
 j = 1
 
 KURTOSIS <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(kurtosis(x))
         return(kurtosis(x, method="l.moment"))
 })
@@ -197,7 +198,7 @@ h = 6
 j = 1
 
 AREA <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(kurtosis(x))
         return(as.numeric(AUC(x = c(0:h), y = x), method = "spline"))
 })
@@ -209,7 +210,7 @@ h = 6
 j = 1
 
 IRF_SMOOTH <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(kurtosis(x))
         
         plot(y = x, x = c(0:h), type = "b")
@@ -223,7 +224,7 @@ h = 6
 j = 1
 
 IRF_SLOPE <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(kurtosis(x))
         return(D1tr(y = x, x = c(0:h)))
 })
@@ -236,7 +237,7 @@ h = 6
 j = 1
 
 IRF_SHAPE <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(kurtosis(x))
         return(D1tr(y = D1tr(y = x, x = c(0:h)), x = c(0:h)))
 })
@@ -249,7 +250,7 @@ h = 6
 j = 1
 
 IRF_1DERIV <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(kurtosis(x))
         return(D1ss(y = x, x = c(1:(h+1))))
 })
@@ -263,7 +264,7 @@ h = 6
 j = 1
 
 IRF_2DERIV <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         #return(kurtosis(x))
         return(D2ss(y = x, x = c(0:h)))
 })
@@ -277,7 +278,7 @@ h = 6
 j = 1
 
 IRF_HIST <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         hist(x)
 })
 ```
@@ -288,7 +289,7 @@ h = 6
 j = 1
 
 VARIANCE <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         return(var(x))
 })
 ```
@@ -300,7 +301,7 @@ h = 6
 j = 1
 
 PEAKS <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         return(length(x[which(diff(sign(diff(x)))==-2)+1])+1)
 })
 ```
@@ -311,7 +312,7 @@ h = 6
 j = 1
 
 DAYS <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]][[j]]$model$phi, ma = ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
         decay <- h+1
         while (abs((x[decay] - x[decay - 1])) < 0.01){
                 decay <- decay - 1
@@ -324,31 +325,37 @@ DAYS <- lapply(seq_along(TOPICS), function(i){
 
 h = 100
 
-j = 1
-
-IRF <- lapply(seq_along(TOPICS), function(i){
-        x = cumsum(c(1, ARMAtoMA(ar = S_ARIMA_BASIC[[i]][[j]]$model$phi, ma = S_ARIMA_BASIC[[i]][[j]]$model$theta, lag.max = h)))
+IRF <- lapply(seq_along(TOPICS[interesting]), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]]$model$phi, ma = ARIMA_BASIC[[i]]$model$theta, lag.max = h)))
 })
 
-IRF <- setNames(IRF, TOPICS)
+IRF <- setNames(IRF, TOPICS[interesting])
 ```
 
-```{r plotly}
+```{r plotly_irf}
 
-h = 20
-
-j = 1
-
-interesting = c(8,12,18,25,31,37,27,28,29,30)
+h = 100
 
 pltly <- plotly::plot_ly(type = "scatter", mode = "lines") 
-for (i in 1: length(TOPICS[interesting])){
-        pltly <- plotly::add_trace(p = pltly, y = byTopic[[interesting[i]]][[6]], x = byTopic[[interesting[i]]][[1]], name = TOPICS[interesting][i])
+for (i in 1: length(TOPICS[interesting[c(1,4,6,8)]])){
+        pltly <- plotly::add_trace(p = pltly, y = IRF[c(1,4,6,8)][[i]][1:h], x = c(0:(h-1)), name = TOPICS[interesting[c(1,4,6,8)]][i])
 }
 
 pltly
 
 ```
+
+```{r plotly_ts}
+
+pltly <- plotly::plot_ly(type = "scatter", mode = "lines") 
+for (i in 1: length(TOPICS[interesting[c(1,4,6,8)]])){
+        pltly <- plotly::add_trace(p = pltly, y = byTopic[interesting[c(1,4,6,8)]][i]$score, x = byTopic[interesting[c(1,4,6,8)]][i]$publish_date, name = TOPICS[interesting[c(1,4,6,8)]][i])
+}
+
+pltly
+
+```
+
 
 ```{r typology}
 TYPE <- c(NA, 2, NA, NA, NA, NA, NA, 1, NA, NA, NA, 1, NA, 2, NA, NA, NA, 1, 1, NA, NA, NA, 3, 2, 3, NA, 3, 3, 2, 1, 2, 3, NA, NA, NA, NA, 1)
@@ -379,7 +386,7 @@ texts = lapply(seq_along(TOPICS), FUN = function(i){
         #         tail(
         #                 DT[.(CATEGORIES[i]), .(title, sent_text, category_proba), by = article_id], 
         #                 options = list(autoWidth = T))))
-        datatable(DT[!is.na(TOPICS[i]), .(publish_date, site, title),], 
+        datatable(texts[!is.na(TOPICS[inte]), .(publish_date, site, title),], 
                   options = list(autoWidth = T))
 })
 ```

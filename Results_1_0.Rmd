@@ -1,0 +1,315 @@
+---
+title: "Results1.0"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+
+# check dependencies
+packages = c(
+             "data.table",
+             "forecast",
+             "ggplot2",
+             "xts",
+             "lmtest",
+             "FinTS",
+             "DescTools")
+lapply(packages, require, character.only = T)
+
+# load sources
+source("paths.R")
+source("getData.R")
+source("tidyData.R")
+source("analyzeData.R")
+
+```
+
+```{r read_data}
+if (!file.exists("raw.Rda")){
+# link to a 0.6GB file including all data, no texts, in CSV format
+        DT <- fread(input = paste(NEW_DATA_PATH, "all_files_no_text.csv", sep = "/"), sep = ",", quote = '"')
+} else {
+        load("raw.Rda")
+}
+```
+
+```{r context}
+# filter only the context(s) of interest
+setkey(DT, "context")
+DT <- DT["American Politics",]
+```
+
+```{r site}
+# read only US websites names
+WEBSITES = readWebsites()
+# filter DT by WEBSITES
+DT <- DT[site %in% WEBSITES$site,]
+```
+
+```{r state}
+# read states list
+STATES = readStates()
+# read association of colors to states
+COLORS = readColors()
+STATES = merge(STATES, COLORS, all = T, by = "state")
+# add states (of origin of sources):
+setkey(DT,site)
+setkey(WEBSITES, site)
+DT = merge(DT,WEBSITES, all = F, all.x = T)
+```
+
+```{r dates}
+# split PUBLISH_DATE to publish_date and publish_time
+DT[,publish_time := sapply(strsplit(publish_date,' '), "[", 2)][,publish_date := sapply(strsplit(publish_date,' '), "[", 1)]
+DT[, publish_date := as.Date(publish_date)]
+
+# cut dates before 2016:
+DT = DT[publish_date >= as.Date("2016-01-01"),]
+
+# get full date range (in days)
+DATES <-  getDates(DT)
+```
+
+```{r topics}
+# extract list of topics in dataset
+topicCols <- colnames(DT)[c(11:19, 21:230)]
+# select topics with more than 30 data points
+relevant <- sapply(seq_along(topicCols), function(i) {length(unique(DT[, get(topicCols[i])]))}) > 30
+# set TOPICS for relevant topics only
+TOPICS <- topicCols[relevant]
+
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        DT[!is.na(get(TOPICS[i])), c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
+        # cut @ 0.05 threshold (more than one sentence identified out of first 20)
+#         DT[get(TOPICS[i]) > 0.05, c("publish_date", "state", "site", "title", TOPICS[i]), with = FALSE]
+})
+```
+
+```{r counts}
+
+# how many articles per day per site? (returns list of topics)
+articleCountPerSite <- lapply(seq_along(TOPICS), function(i){
+        getAggregated(byTopic[[i]], grpby = "site")
+})
+# how many articles per day per state? (returns list of topics)
+articleCountPerState <- lapply(seq_along(TOPICS), function(i){
+        getAggregated(byTopic[[i]], grpby = "state")
+})
+
+articleCount <- lapply(seq_along(TOPICS), function(i){
+        getAggregated(byTopic[[i]])
+})
+
+# check if there are no rows without topic in DT (sanity)
+if (length(DT[, rowSums(.SD, na.rm = T), .SDcols = TOPICS]) == nrow(DT)){
+        TotalArticleCountPerSite <- getAggregated(DT, grpby = "site")
+        TotalArticleCountPerState <- getAggregated(DT, grpby = "state")
+        TotalArticleCount <- getAggregated(DT)
+}
+
+# calculate daily Salience per site
+salience.local <- lapply(seq_along(TOPICS), function(i){
+        tmp <- merge(x = articleCountPerState[[i]], 
+                     y = TotalArticleCountPerState,
+                     by = c("publish_date", "state"),
+                     all.x = T)
+        tmp[state != "Nationwide", local := N.x/N.y]
+        tmp[state != "Nationwide", daily := lapply(.SD, mean), .SDcols = "local", by = "publish_date"]
+        return(unique(tmp[, .(publish_date, daily)]))
+})
+
+# calculate daily Salience per state
+salience.nationwide <- lapply(seq_along(TOPICS), function(i){
+        tmp <- merge(x = articleCountPerSite[[i]],
+                     y = TotalArticleCountPerSite,
+                     by = c("publish_date", "site"),
+                     all.x = T)
+        tmp[site %in% WEBSITES[state == "Nationwide", site], nationwide := N.x/N.y]
+        tmp[site %in% WEBSITES[state == "Nationwide", site], daily := lapply(.SD, mean), .SDcols = "nationwide", by = "publish_date"]
+        return(unique(tmp[, .(publish_date, daily)]))
+})
+
+salience.total <- lapply(seq_along(TOPICS), function(i){
+        tmp <- merge(x = articleCount[[i]], 
+                     y = TotalArticleCount,
+                     by = "publish_date",
+                     all.x = T)
+        tmp[, score := N.x/N.y]
+        return(unique(tmp[, .(publish_date, score)]))
+})
+```
+
+```{r scores}
+
+salience <- lapply(seq_along(TOPICS), function(i){
+        tmp <- merge(salience.local[[i]], salience.nationwide[[i]], all = T)
+        tmp[, score := lapply(.SD, mean, na.rm = T), .SDcols = "daily", by = "publish_date"]
+        return(unique(tmp[, .(publish_date, score)]))
+})
+
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        merge(x = byTopic[[i]], y = salience[[i]], by = c("publish_date"), all.x = T, all = F)
+})
+
+```
+
+```{r padding}
+# do padding of dates set missing dates values to 0 (instead fo NA)
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        setDates(byTopic[[i]], DATES)
+        # print (paste("finished topic", i, sep = " "))
+        
+})
+
+# byTopic <- lapply(seq_along(TOPICS), function(i){
+#         lapply(seq(8,14,1), function(j){
+#                 set(byTopic[[i]], which(is.na(byTopic[[i]][[j]])), j, 0)
+#         })
+#         print(i)
+# })
+        
+```
+
+```{r collection_issues}
+# remove "leadin" 1 values, probably introduced due to collection issues
+start <- DT[,.N, by = .(publish_date, site)][,.N, by = .(publish_date)][N > 10, publish_date][1]
+
+byTopic <- lapply(seq_along(TOPICS), function(i){
+        byTopic[[i]][publish_date >= start,]
+})
+```
+
+
+```{r interesting}
+interesting <- c(8, 12, 18, 25, 31, 37, 28, 30)
+```
+
+
+## ARIMA models
+# AR(p) Model: 
+$x_t$ = $\phi$$x_{t-1}$ + $\epsilon_t$
+
+```{r arima_model}
+ARIMA_BASIC <- lapply(interesting, function(i){
+                model <- NULL
+                if (byTopic[[i]][, .N] > 0){
+                        t <- ts(unique(byTopic[[i]][, .(publish_date, score)]))[,2]
+                        tryCatch({model <- auto.arima(y = t)}, error=function(e) e)
+                }
+        return(model)
+})
+
+ARIMA_BASIC <- setNames(ARIMA_BASIC, TOPICS[interesting])
+
+ARIMA_BASIC
+```
+
+# Diagnostics
+
+```{r tsdiag}
+DIAGPLOT <- lapply(seq_along(interesting), function(i){
+        r <- NULL        
+        if (!is.null(ARIMA_BASIC[[i]])){
+                        r <- tsdiag(ARIMA_BASIC[[i]])
+        }
+        return(r)
+})
+DIAGPLOT <- setNames(DIAGPLOT, TOPICS[interesting])
+```
+
+```{r fit}
+ACTUALvsFITTED <- lapply(seq_along(interesting), function(i){
+        r <- NULL        
+        if (!is.null(ARIMA_BASIC[[i]])){
+                        plot(ARIMA_BASIC[[i]]$x, type = "l", main = TOPICS[interesting[i]])
+                        lines(ARIMA_BASIC[[i]]$fitted, col = "red")
+        }
+        return(r)
+})
+ACTUALvsFITTED <- setNames(ACTUALvsFITTED, TOPICS[interesting])
+```
+
+
+```{r serial_test}
+SERIALCORR <- lapply(seq_along(interesting), function(i){
+        bgtest(ARIMA_BASIC[[i]]$residuals ~ 1, order = 7)        
+        
+})
+SERIALCORR <- setNames(SERIALCORR, TOPICS[interesting])
+```
+
+```{r arch_test}
+ARCH <- lapply(seq_along(interesting), function(i){
+        ArchTest(ARIMA_BASIC[[i]]$residuals, lags = 7)        
+})
+ARCH <- setNames(ARCH, TOPICS[interesting])
+```
+
+```{r normality_test}
+NORM <- lapply(seq_along(interesting), function(i){
+        JarqueBeraTest(ARIMA_BASIC[[i]]$residuals, robust = T)        
+        
+})
+NORM <- setNames(NORM, TOPICS[interesting])
+```
+
+```{r hypothesis_testing}
+DIAGTEST <- lapply(seq_along(interesting), function(i){
+        test <- sum(
+                # NORM[[i]][[j]]$p.value > 0.05,
+                ARCH[[i]]$p.value > 0.05,
+                SERIALCORR[[i]]$p.value > 0.05
+        )
+        if (test == 2) {
+                print(TOPICS[interesting[i]])}
+        return(test)
+})
+DIAGTEST <- setNames(DIAGTEST, TOPICS[interesting])
+
+```
+
+```{r coeftest}
+COEF_SIG <- lapply(seq_along(TOPICS[interesting]), function(i){
+        coeftest(ARIMA_BASIC[[i]])
+})
+
+COEF_SIG
+```
+
+```{r residual_acf}
+RESID_ACF <- lapply(seq_along(TOPICS[interesting]), function(i){
+        Acf(ARIMA_BASIC[[i]]$residuals, plot = F)        
+})
+```
+
+```{r residual_pacf}
+RESID_PACF <- lapply(seq_along(TOPICS[interesting]), function(i){
+        Acf(ARIMA_BASIC[[i]]$residuals, plot = F, type = "partial")        
+})
+```
+
+```{r irf}
+
+h = 100
+
+IRF <- lapply(seq_along(TOPICS[interesting]), function(i){
+        x = cumsum(c(1, ARMAtoMA(ar = ARIMA_BASIC[[i]]$model$phi, ma = ARIMA_BASIC[[i]]$model$theta, lag.max = h)))
+})
+
+IRF <- setNames(IRF, TOPICS[interesting])
+```
+
+```{r plotly_irf}
+
+h = 100
+
+pltly <- plotly::plot_ly(type = "scatter", mode = "lines") 
+for (i in 1: length(TOPICS[interesting[c(1,4,6,8)]])){
+        pltly <- plotly::add_trace(p = pltly, y = IRF[c(1,4,6,8)][[i]][1:h], x = c(0:(h-1)), name = TOPICS[interesting[c(1,4,6,8)]][i])
+}
+
+pltly
+
+```
